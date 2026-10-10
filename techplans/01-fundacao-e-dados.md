@@ -97,7 +97,7 @@ Diferenças em relação ao `contexto/02`: `origem`, `pautas_sugeridas`, `data_r
 - [ ] `AppDbContext` com `UseNpgsql(...).UseSnakeCaseNamingConvention()`, nomes de tabela explícitos (`ToTable("cliente")` etc.) e `HasConversion<string>()` em todos os enums
 - [ ] Comando `--init-db` em `Program.cs`; rodar e validar com um `db.Clientes.CountAsync()` no startup
 - [ ] Contratos do [00](00-visao-geral.md) em `Services/`
-- [ ] `FakeTranscriptionService` (devolve um texto fixo depois de 3 s) e `FakeConversationAnalysisService` (devolve uma `AnaliseConversa` fixa). Uma flag `UsarFakes` no `appsettings.Development.json` escolhe o registro no DI.
+- [ ] `FakeTranscriptionService` (devolve um texto fixo depois de 3 s) e `FakeConversationAnalysisService` (devolve uma `AnaliseConversa` fixa). Duas flags no `appsettings.Development.json`, `Fakes:Transcricao` e `Fakes:Analise`, escolhem o registro no DI de cada um.
 - [ ] Página `/Clientes`: lista com link para o perfil e formulário de novo cliente (nome obrigatório)
 - [ ] `db/seed.sql`: 3 clientes fictícios, um deles com uma conversa `Concluida`, insights aprovados (incluindo um aniversário nos próximos dias) e 2 to-dos pendentes
 
@@ -105,7 +105,7 @@ Diferenças em relação ao `contexto/02`: `origem`, `pautas_sugeridas`, `data_r
 
 - `dotnet run` sobe sem erro e `/Clientes` lista os clientes do seed
 - Criar um cliente pela tela grava no Supabase (conferir no Table Editor)
-- Com `UsarFakes: true`, a app sobe sem modelo Whisper e sem chave da OpenAI
+- Com as duas flags de fake em `true`, a app sobe sem modelo Whisper e sem chave da OpenAI
 
 ## Riscos
 

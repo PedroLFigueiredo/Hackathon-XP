@@ -2,7 +2,7 @@
 
 Lê primeiro este arquivo. Ele consolida a análise de `contexto/`, as decisões técnicas e os contratos que os outros planos assumem.
 
-A sequência de execução, etapa por etapa, está em [EXECUCAO.md](EXECUCAO.md).
+A sequência de execução está em [EXECUCAO.md](EXECUCAO.md): uma base feita por um Claude, depois duas trilhas em paralelo ([back](EXECUCAO-BACK.md) e [front](EXECUCAO-FRONT.md)) e uma etapa de integração.
 
 | Plano | Entrega | Estimativa |
 |---|---|---|

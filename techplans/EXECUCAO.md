@@ -1,25 +1,35 @@
 # Roteiro de Execução — MVP Memória de Relacionamento
 
-Arquivo único com todas as etapas, na ordem em que o Claude Code executa. Os detalhes de cada etapa (schema, contratos, prompt, layout) estão nos techplans [00](00-visao-geral.md) a [04](04-telas.md); aqui fica a sequência, o que verifica cada etapa e o estado atual.
+A execução tem três fases. A base é feita por um Claude só; depois dois Claudes trabalham em paralelo, cada um com o seu arquivo; no fim um deles integra.
+
+| Fase | Quem | Arquivo | Tempo |
+|---|---|---|---|
+| Base (etapas 1 a 5) | 1 Claude | este arquivo | 2h30 |
+| Paralelo | Claude do back | [EXECUCAO-BACK.md](EXECUCAO-BACK.md) | 2h00 |
+| Paralelo | Claude do front | [EXECUCAO-FRONT.md](EXECUCAO-FRONT.md) | 2h05 |
+| Integração (etapa 6) | 1 Claude | este arquivo | 0h25 |
+
+Total: cerca de 5h, contra 6h55 em sequência. Os detalhes técnicos de cada etapa estão nos techplans [00](00-visao-geral.md) a [04](04-telas.md).
 
 ## Estado
 
-- **Etapa atual:** 0 (aguardando pré-requisitos)
+- **Fase atual:** Base, etapa 0 (aguardando pré-requisitos)
 - **Modelo Whisper escolhido:** a definir na etapa 2
 - **Observações:** —
 
-## Regras de execução
+## Regras de execução (valem para as três fases)
 
-1. Uma etapa por vez, na ordem. Só avança quando o "Pronto quando" da etapa foi verificado de fato (rodando a aplicação, não só compilando).
-2. Ao terminar uma etapa: marcar as caixas, atualizar o bloco **Estado** e fazer um commit com a mensagem `etapa N: <título>`.
+1. Uma etapa por vez, na ordem. Só avança quando o "Pronto quando" foi verificado rodando a aplicação, não só compilando.
+2. Ao terminar uma etapa: marcar as caixas, atualizar o bloco **Estado** do próprio arquivo e fazer um commit `etapa N: <título>`.
 3. Toda etapa termina com `dotnet build` sem erros e a aplicação subindo.
 4. Problema de hardware com o Whisper é avisado na hora, não contornado em silêncio.
 5. Segredos só em `dotnet user-secrets`. Nada de chave em arquivo versionado.
 6. Se uma etapa estourar o dobro do tempo previsto, parar e aplicar a linha de corte do [00](00-visao-geral.md).
-7. Itens marcados **[VOCÊ]** dependem de uma pessoa; o resto o Claude faz sozinho.
+7. Itens marcados **[VOCÊ]** dependem de uma pessoa.
 
 ## Pré-requisitos **[VOCÊ]**
 
+- [ ] Configurar a identidade do Git (`git config --global user.name` e `user.email`)
 - [ ] Autorizar a instalação do .NET 8 SDK (`winget install Microsoft.DotNet.SDK.8`)
 - [ ] Criar o projeto no Supabase e copiar a connection string do **Session pooler** (porta 5432)
 - [ ] Criar a chave da OpenAI
@@ -31,6 +41,10 @@ Arquivo único com todas as etapas, na ordem em que o Claude Code executa. Os de
   ```
 
 ---
+
+# Fase Base
+
+Objetivo da base: deixar o ciclo completo funcionando com implementações falsas. Quando ela termina, colar um texto já cria conversa, passa pelos status e gera insights fictícios. A partir daí o back só troca os fakes pelos serviços reais e o front só constrói tela, sem um esperar o outro.
 
 ## Etapa 1 — Setup do projeto (20 min)
 
@@ -49,7 +63,7 @@ Plano: [01](01-fundacao-e-dados.md), seção Setup.
 Plano: [02](02-ingestao-audio-e-texto.md), seção Spike. Feito cedo para o risco de hardware aparecer antes de tudo.
 
 - [ ] Baixar `ggml-small.bin` e `ggml-base.bin` para `models/`
-- [ ] Gerar um áudio de teste em português de ~1 min com a voz do Windows (`System.Speech`) a partir de uma transcrição fictícia. Se não houver voz pt-BR instalada: **[VOCÊ]** grava 1 minuto no celular e coloca em `uploads/teste.m4a`
+- [ ] Gerar um áudio de teste em português de ~1 min com a voz do Windows (`System.Speech`) a partir de uma transcrição fictícia, salvo em `uploads/teste.wav`. Se não houver voz pt-BR instalada: **[VOCÊ]** grava 1 minuto no celular
 - [ ] Console descartável (fora do projeto principal) medindo carga do modelo e tempo de transcrição com `small` e com `base`
 - [ ] Registrar os tempos e o modelo escolhido no bloco **Estado**
 
@@ -61,108 +75,85 @@ Plano: [01](01-fundacao-e-dados.md); contratos no [00](00-visao-geral.md).
 
 - [ ] Pacotes `Npgsql.EntityFrameworkCore.PostgreSQL` e `EFCore.NamingConventions`
 - [ ] Entidades, enums e `AppDbContext` (snake_case, enums como texto)
-- [ ] `db/schema.sql` e `db/seed.sql` (3 clientes fictícios, uma conversa concluída, um aniversário próximo, 2 to-dos)
+- [ ] `db/schema.sql`
+- [ ] `db/seed.sql` rico o bastante para o front trabalhar sozinho: 3 clientes fictícios; um com conversa `Concluida` e insights `Aprovado` em todas as categorias, incluindo um aniversário nos próximos dias; um com conversa `Concluida` e insights `Pendente`; um com conversa em `Erro`; um cliente sem nenhuma conversa; 3 to-dos pendentes e 1 concluído
 - [ ] Comando `dotnet run -- --init-db`: aplica `schema.sql` e `seed.sql` pelo Npgsql e encerra
 - [ ] `ITranscriptionService`, `IConversationAnalysisService` e os records
-- [ ] `FakeTranscriptionService` e `FakeConversationAnalysisService`, escolhidos pela flag `UsarFakes`
+- [ ] `FakeTranscriptionService` e `FakeConversationAnalysisService`, cada um com 3 s de atraso, escolhidos por duas flags separadas: `Fakes:Transcricao` e `Fakes:Analise` (ambas `true` no `appsettings.Development.json`)
 
-**Pronto quando:** `--init-db` cria as 4 tabelas no Supabase e uma consulta de contagem no startup devolve os 3 clientes do seed.
+**Pronto quando:** `--init-db` cria as 4 tabelas no Supabase e uma consulta de contagem no startup devolve os clientes do seed.
 
 ## Etapa 4 — Clientes (20 min)
 
 Plano: [01](01-fundacao-e-dados.md).
 
 - [ ] Página `/Clientes`: lista + formulário de novo cliente
-- [ ] Página `/Clientes/Detalhe/{id}` ainda vazia, só com nome e contato
+- [ ] Página `/Clientes/Detalhe/{id}` só com nome e contato
 - [ ] Link no menu
 
 **Pronto quando:** um POST no formulário cria o cliente, ele aparece na lista e o link abre o detalhe.
 
-## Etapa 5 — Pipeline em background com entrada de texto (45 min)
+## Etapa 5 — Pipeline completo com fakes (50 min)
 
 Plano: [02](02-ingestao-audio-e-texto.md), Parte 1.
 
 - [ ] `ConversaQueue`, `ConversaProcessor`, `ConversaWorker`
-- [ ] Recuperação no startup das conversas presas
-- [ ] Handler `OnPostTextoAsync` no detalhe do cliente (data + texto)
-- [ ] `GET /api/conversas/{id}/status`
+- [ ] Mapeamento do resultado da análise para `conversa`, `informacao_insight` e `acao_todo` (regras no [03](03-analise-ia.md))
+- [ ] Recuperação no startup das conversas presas, desligável por `Pipeline:RecuperarNoStartup`
+- [ ] `ConversaService`, o ponto de contato único entre tela e pipeline:
+  ```csharp
+  Task<Guid> CriarDeTextoAsync(Guid clienteId, DateOnly data, string texto, CancellationToken ct);
+  Task<Guid> CriarDeAudioAsync(Guid clienteId, DateOnly data, Stream arquivo, string nomeArquivo, CancellationToken ct);
+  ```
+  O de áudio valida a extensão, salva em `uploads/{conversaId}{ext}` e enfileira.
+- [ ] `GET /api/conversas/{id}/status` devolvendo `{ status, mensagemDeErro }`
+- [ ] No detalhe do cliente, um formulário cru (sem estilo) com data, `textarea` e campo de arquivo, chamando os dois métodos do `ConversaService`
 
-**Pronto quando:** com `UsarFakes: true`, enviar um texto por `curl` cria a conversa e o endpoint de status passa por `Analisando` e chega a `Concluida`, sem passar por `Transcrevendo`. Os insights e to-dos do fake aparecem no banco.
+**Pronto quando:** pelo formulário cru, um texto chega a `Concluida` sem passar por `Transcrevendo`, e um arquivo de áudio passa por `Transcrevendo` → `Analisando` → `Concluida`. Em ambos os casos os insights e to-dos do fake aparecem no banco.
 
-## Etapa 6 — Análise real com a OpenAI (1h)
+## Bifurcação
 
-Plano: [03](03-analise-ia.md).
+Depois do commit da etapa 5, **os contratos ficam congelados**: interfaces, records, entidades, schema e as assinaturas do `ConversaService`.
 
-- [ ] Pacote `OpenAI`
-- [ ] Schema JSON estrito e prompt de sistema
-- [ ] `OpenAiConversationAnalysisService` com tratamento de recusa e truncamento
-- [ ] `FatosJaConhecidos` e mapeamento do resultado no `ConversaProcessor`, limpando pendentes no reprocessamento
-- [ ] Três transcrições fictícias em `db/transcricoes-exemplo/`
+- [ ] Commit da etapa 5 feito na `main`
+- [ ] Criar as duas frentes:
+  ```
+  git switch -c back
+  git worktree add ../Hackathon-XP-front -b front
+  ```
+- [ ] **[VOCÊ]** Abrir dois terminais do Claude Code:
+  - em `C:\Users\figue\Hackathon-XP` → "execute o `techplans/EXECUCAO-BACK.md`"
+  - em `C:\Users\figue\Hackathon-XP-front` → "execute o `techplans/EXECUCAO-FRONT.md`"
 
-**Pronto quando:** com `UsarFakes: false` para a análise, a transcrição rica gera insights de família e uma ação, todos com `trecho_de_origem` presente no texto; a transcrição só de negócios não gera fatos pessoais inventados; chave inválida leva a conversa para `Erro` com mensagem legível.
+### Regras do paralelo
 
-## Etapa 7 — Tela do cliente (1h30)
+| Assunto | Regra |
+|---|---|
+| Pastas | Back: `Services/`, `Program.cs`, `.csproj`, `db/`. Front: `Pages/`, `wwwroot/`. Ninguém edita a pasta do outro. |
+| Contratos | Precisa mudar um contrato congelado? Para e avisa a pessoa. Não muda sozinho. |
+| Porta | Back em `http://localhost:5000`, front em `http://localhost:5080` (`dotnet run --urls ...`). |
+| Banco | Os dois usam o mesmo Supabase. Ninguém roda `--init-db` durante o paralelo sem a pessoa autorizar, porque apaga os dados do outro. |
+| Fakes | O front roda sempre com os dois fakes ligados. O back desliga os fakes pela linha de comando (`--Fakes:Analise=false`), sem editar o `appsettings`. |
+| Roteiro | Cada Claude atualiza só o **Estado** do seu próprio arquivo. |
 
-Plano: [04](04-telas.md), Tela 2.
-
-- [ ] Cartão "Nova conversa" com as abas Áudio e Texto (a aba Áudio fica desabilitada até a etapa 8)
-- [ ] Status em andamento + polling de 2 s
-- [ ] Seção 1: sentimento e resumo
-- [ ] Seção 3: revisão de insights (aprovar, editar, descartar, aprovar todos)
-- [ ] Seção 2: CRM humanizado só com aprovados + próximos eventos
-- [ ] Linha do tempo e to-do local
-
-**Pronto quando:** colar uma transcrição de exemplo na tela leva, sem recarregar à mão, até a lista de revisão; aprovar move o insight para o perfil, descartar some com ele, editar grava o texto novo.
-
-## Etapa 8 — Entrada de áudio com Whisper (1h)
-
-Plano: [02](02-ingestao-audio-e-texto.md), Parte 2.
-
-- [ ] Pacotes `Whisper.net`, `Whisper.net.Runtime`, `NAudio`
-- [ ] `WhisperFactory` singleton + checagem do modelo no startup
-- [ ] `AudioNormalizer` (qualquer entrada → WAV 16 kHz mono)
-- [ ] `WhisperTranscriptionService` com idioma `pt`
-- [ ] Handler `OnPostAudioAsync`, limite de upload de 200 MB, aba Áudio habilitada com arrastar e soltar
-
-**Pronto quando:** o áudio de teste da etapa 2 enviado pela tela passa por `Transcrevendo` → `Analisando` → `Concluida` com transcrição legível; um arquivo inválido vira `Erro` sem derrubar a aplicação; a transcrição funciona com a rede desligada.
-
-## Etapa 9 — Painel do assessor (35 min)
-
-Plano: [04](04-telas.md), Tela 1.
-
-- [ ] Widget 1: datas importantes dos próximos 30 dias + pautas sugeridas
-- [ ] Widget 2: to-dos pendentes de toda a carteira com checkbox
-- [ ] Contador de insights aguardando revisão por cliente
-
-**Pronto quando:** o aniversário do seed aparece com o cliente certo e marcar um to-do no painel reflete no perfil do cliente.
-
-## Etapa 10 — Polimento e ensaio (25 min)
-
-Plano: [04](04-telas.md), Polimento.
-
-- [ ] Estados vazios e mensagens de erro revisados
-- [ ] Seed final conferido (só dados fictícios)
-- [ ] `README.md` na raiz: como instalar, baixar o modelo, configurar segredos e rodar
-- [ ] Roteiro da demo executado do início ao fim uma vez, cronometrado
-- [ ] **[VOCÊ]** Ensaio final com a apresentação
-
-**Pronto quando:** partindo de um banco recém-criado com `--init-db`, o roteiro completo (painel → cliente → texto → revisão → áudio → painel) roda sem erro.
+Os segredos do `user-secrets` valem para as duas pastas, porque ficam no perfil do usuário e não no repositório. A pasta `models/` só existe na pasta do back, e o front não precisa dela.
 
 ---
 
-## Resumo de tempo
+# Fase de Integração
 
-| Etapa | Tempo | Acumulado |
-|---|---|---|
-| 1. Setup | 0h20 | 0h20 |
-| 2. Spike Whisper | 0h15 | 0h35 |
-| 3. Dados, contratos e fakes | 0h45 | 1h20 |
-| 4. Clientes | 0h20 | 1h40 |
-| 5. Pipeline com texto | 0h45 | 2h25 |
-| 6. Análise OpenAI | 1h00 | 3h25 |
-| 7. Tela do cliente | 1h30 | 4h55 |
-| 8. Áudio com Whisper | 1h00 | 5h55 |
-| 9. Painel | 0h35 | 6h30 |
-| 10. Polimento | 0h25 | 6h55 |
+## Etapa 6 — Integração e ensaio (25 min)
 
-Ponto de checagem: ao fim da etapa 7 (≈5h) o MVP já é demonstrável só com texto. Se a etapa 8 travar, a demo segue com texto e um áudio já processado no seed.
+Feita na pasta principal, quando as duas frentes terminarem.
+
+- [ ] `git switch main`, `git merge back`, `git merge front`. Com a divisão de pastas respeitada não deve haver conflito.
+- [ ] `git worktree remove ../Hackathon-XP-front`
+- [ ] Trocar `Fakes:Transcricao` e `Fakes:Analise` para `false` no `appsettings.Development.json`
+- [ ] `--init-db` para voltar ao seed limpo
+- [ ] Roteiro da demo de ponta a ponta com os serviços reais: painel → cliente → colar texto → revisar e aprovar → enviar áudio → painel com to-dos e datas novas
+- [ ] `README.md` na raiz: como instalar, baixar o modelo, configurar segredos e rodar
+- [ ] **[VOCÊ]** Ensaio final com a apresentação
+
+**Pronto quando:** partindo de um banco recém-criado, o roteiro completo roda sem erro com Whisper e OpenAI de verdade.
+
+Se o back não tiver terminado o Whisper quando o front acabar, integra-se o que houver: a demo segue com texto e o áudio fica com o fake desligado só quando estiver estável.
