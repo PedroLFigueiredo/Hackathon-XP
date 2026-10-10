@@ -1,4 +1,4 @@
-# 04. Ideias Futuras: Memória de Relacionamento
+# 04. Ideias Futuras: XP Insight 
 
 Documento criado em 10/10/2026. Reúne ideias de evolução para depois da aplicação base do MVP. Nenhuma delas está implementada.
 
