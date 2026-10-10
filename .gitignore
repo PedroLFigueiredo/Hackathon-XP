@@ -483,3 +483,15 @@ $RECYCLE.BIN/
 
 whisper-models/
 uploads/
+# Segredos
+.env
+
+# Modelos do Whisper e áudios enviados
+models/
+uploads/
+
+# .NET
+bin/
+obj/
+.vs/
+*.user

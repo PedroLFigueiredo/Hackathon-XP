@@ -4,37 +4,41 @@ Lê primeiro este arquivo. Ele consolida a análise de `contexto/`, as decisões
 
 A sequência de execução está em [EXECUCAO.md](EXECUCAO.md): uma base feita por um Claude, depois duas trilhas em paralelo ([back](EXECUCAO-BACK.md) e [front](EXECUCAO-FRONT.md)) e uma etapa de integração.
 
+**O modelo de dados é o `schema.sql` da raiz do repositório.** Ele é a fonte de verdade; os planos se adaptam a ele, não o contrário.
+
 | Plano | Entrega | Estimativa |
 |---|---|---|
-| [01 — Fundação e dados](01-fundacao-e-dados.md) | Projeto rodando, schema no Supabase, CRUD de clientes, seed | 1h15 |
+| [01 — Fundação e dados](01-fundacao-e-dados.md) | Projeto rodando, mapeamento do schema, CRUD de clientes, seed | 1h15 |
 | [02 — Ingestão: áudio e texto](02-ingestao-audio-e-texto.md) | Duas entradas, um pipeline em background, Whisper offline | 1h45 |
-| [03 — Análise por IA](03-analise-ia.md) | Transcrição → JSON estrito → insights, to-dos, resumo | 1h00 |
-| [04 — Telas](04-telas.md) | Perfil do cliente, painel do assessor, polimento da demo | 2h30 |
+| [03 — Análise por IA](03-analise-ia.md) | Transcrição → JSON estrito → perfil, eventos, financeiro, ações | 1h00 |
+| [04 — Telas](04-telas.md) | Perfil do cliente, painel do assessor, polimento da demo | 2h40 |
 
-Somando o setup (30 min), dá as 7 horas sem folga. A linha de corte está no fim deste arquivo.
+Em sequência, com o setup, dá cerca de 7h10. Em paralelo, cerca de 5h10. A linha de corte está no fim deste arquivo.
 
 ## Fluxo com as duas entradas
 
-A transcrição pode já existir. Então a conversa entra por um de dois caminhos e ambos convergem no mesmo campo (`conversa.transcricao`) antes da análise:
+A transcrição pode já existir. Então a conversa entra por um de dois caminhos e ambos convergem no mesmo campo (`conversas.transcricao`) antes da análise:
 
 ```
 Entrada A: áudio (wav/mp3/m4a) ─► normaliza p/ 16 kHz mono ─► Whisper.net (offline) ─┐
-                                                                                    ├─► conversa.transcricao ─► análise IA ─► insights pendentes
-Entrada B: texto (colado ou .txt) ──────────────────────────────────────────────────┘                                        + to-dos + resumo
+                                                                                    ├─► conversas.transcricao ─► análise IA ─► itens pendentes
+Entrada B: texto (colado ou .txt) ──────────────────────────────────────────────────┘                                        de revisão + ações
 ```
 
-A regra do worker é uma só: **só transcreve se `transcricao` estiver vazia e houver `caminho_do_audio`**. Daí saem três coisas de graça:
+A regra do worker é uma só: **só transcreve se `transcricao` estiver vazia e houver `caminho_audio`**. Daí saem três coisas de graça:
 
 - a entrada por texto não precisa de código próprio no pipeline, só pula a etapa;
-- se a análise falhar, reprocessar não roda o Whisper de novo;
+- se a análise falhar, tentar de novo não roda o Whisper outra vez;
 - a demo tem um plano B: se o Whisper estiver lento na hora, cola-se o texto.
+
+Não há coluna de origem: conversa com `caminho_audio` nulo veio por texto.
 
 ## Avisos do ambiente (verificados nesta máquina)
 
 1. **Não há .NET SDK instalado**, só runtimes (ASP.NET Core 8.0.21). Primeiro passo: `winget install Microsoft.DotNet.SDK.8`.
 2. **Whisper vai rodar só em CPU.** A máquina é um i5-1334U (10 núcleos, linha U de baixo consumo), 16 GB de RAM, sem GPU dedicada. Minha estimativa, ainda não medida: `base` roda bem mais rápido que tempo real, `small` fica perto do tempo real, `medium` e `large` são inviáveis para demo ao vivo. O spike do plano 02 mede isso antes de qualquer outra coisa.
 3. **Não há ffmpeg.** A conversão de áudio fica com o NAudio, que resolve dentro do processo no Windows.
-4. O repositório não tem commits nem `.gitignore`. Chaves e connection string vão em `dotnet user-secrets`, nunca no repo.
+4. Os segredos ficam no `.env` da raiz, que está no `.gitignore`. O `.env.example` é o modelo versionado.
 
 ## Decisões
 
@@ -47,25 +51,56 @@ A regra do worker é uma só: **só transcreve se `transcricao` estiver vazia e 
 | D5 | Structured Outputs (`json_schema` com `strict: true`) em vez de `json_object` | `json_object` garante JSON válido, mas não o formato. Com schema estrito o parse nunca quebra. Atende a regra de "JSON estrito" do `contexto/02`. |
 | D6 | Fila em memória: `Channel<Guid>` + um `BackgroundService`, um job por vez | Whisper ocupa a CPU inteira; paralelizar só piora. No startup, conversas presas em status intermediário voltam para a fila. |
 | D7 | Construir o caminho de **texto primeiro**, o áudio depois | O texto exercita o pipeline inteiro sem o risco do Whisper. O áudio vira só uma etapa a mais na frente. |
+| D8 | Segredos em `.env` na raiz, carregado com o pacote `DotNetEnv` | Um arquivo só para o time copiar. `DATABASE_URL` fica no formato URI do Supabase e a app converte para o formato do Npgsql. |
 
-## Lacunas do `contexto/` e como foram resolvidas
+## Como o `schema.sql` atende as telas
 
-| Lacuna | Resolução |
+| Necessidade | Onde fica no schema |
 |---|---|
-| Transcrição pode já existir | `conversa.origem` (`Audio`/`Texto`) e `caminho_do_audio` passa a ser opcional |
-| "Datas importantes" e "Próximos eventos" não têm onde ficar | `informacao_insight.data_referencia` + `recorrente_anual` (aniversários) |
-| "Pautas sugeridas (IA)" não têm onde ficar | `conversa.pautas_sugeridas text[]`; a Home mostra as da última conversa de cada cliente |
-| Resumo são "3 bullets" | `conversa.resumo text[]` |
-| Sentimento sem valores definidos | Enum fixo: `Satisfeito`, `Alinhado`, `Neutro`, `NecessitaAtencao` |
-| Datas relativas na fala ("mês que vem") | A data da reunião vai no prompt; na entrada por texto o assessor informa a data |
-| Whisper não separa quem fala | O prompt pede fatos só sobre o cliente. Texto colado do Teams/Meet costuma vir com os nomes, o que ajuda |
-| O mesmo fato reaparece a cada reunião | Os insights já aprovados do cliente vão no prompt, pedindo só o que é novo ou mudou |
-| Limite de upload do Kestrel é 30 MB | Subir para 200 MB na página de upload |
-| CRUD de clientes não cabe nas "duas telas" | Página simples `/Clientes` (lista + formulário) |
+| Tom da última reunião | `conversas.tom`; `clientes.tom` guarda o tom mais recente, atualizado quando uma conversa conclui |
+| Resumo em 3 bullets | `conversas.resumo`, um bullet por linha |
+| Família, hobbies, estilo de vida | `perfil_pessoal`, agrupado pela primeira tag |
+| Datas importantes e próximos eventos | `informacao_eventos.data_evento`; a tag `anual` marca o que se repete todo ano (aniversários) |
+| O que o cliente disse sobre dinheiro | `informacao_financeiro` (seção nova na tela do cliente, não existia no `contexto/03`) |
+| To-dos | `acoes` com `status_conclusao` `pendente` ou `concluido` |
+| Pautas sugeridas pela IA | `acoes` com a tag `pauta`. São lembretes para o assessor, então cabem na mesma tabela sem coluna nova |
+| Revisão antes de entrar no perfil | `status_revisao` nas três tabelas de informação: `pendente`, `aprovado`, `descartado` |
+| Entrada por texto | `caminho_audio` nulo |
+
+### Ajustes feitos no `schema.sql`
+
+Só os dois sem os quais o MVP não funciona:
+
+1. Faltava a vírgula depois de `email TEXT` em `clientes`; o script nem rodava.
+2. `conversas.caminho_audio` deixou de ser `NOT NULL`, porque a conversa que entra por texto não tem áudio.
+
+Se as tabelas já foram criadas no Supabase com a versão anterior: `ALTER TABLE conversas ALTER COLUMN caminho_audio DROP NOT NULL;`
+
+### Sugestão não aplicada
+
+`informacao_eventos` e `informacao_financeiro` não têm `conversa_id` (a `perfil_pessoal` tem). O MVP funciona sem, mas não dá para saber de qual reunião veio um evento nem limpar os pendentes de uma conversa ao reprocessá-la. Por isso o reprocessamento ficou fora do escopo.
+
+## Valores fixos
+
+Gravados em minúsculas e sem acento, como nos comentários do schema:
+
+- `conversas.status`: `aguardando`, `transcrevendo`, `analisando`, `concluido`, `erro`
+- `tom`: `satisfeito`, `alinhado`, `neutro`, `atencao`
+- `status_revisao`: `pendente`, `aprovado`, `descartado`
+- `acoes.status_conclusao`: `pendente`, `concluido`
+
+Tags: a primeira tag de cada item vem de uma lista fixa, para a tela agrupar; as seguintes são livres.
+
+| Tabela | Primeira tag |
+|---|---|
+| `perfil_pessoal` | `familia`, `hobby`, `estilo_de_vida`, `profissional`, `objetivo`, `outro` |
+| `informacao_eventos` | `anual` (aniversários e datas que se repetem) ou `pontual` |
+| `informacao_financeiro` | `objetivo`, `patrimonio`, `renda`, `liquidez`, `preocupacao`, `outro` |
+| `acoes` | `pauta` (gancho de conversa sugerido pela IA) ou `tarefa` |
 
 ## Contratos compartilhados
 
-Definir estes tipos no início do plano 01, junto com implementações falsas. Assim quem faz tela não espera Whisper nem OpenAI.
+Definidos na fase base, junto com implementações falsas. Assim quem faz tela não espera Whisper nem OpenAI.
 
 ```csharp
 public interface ITranscriptionService
@@ -86,51 +121,37 @@ public record AnaliseRequest(
 
 public record AnaliseConversa(
     List<string> Resumo,
-    Sentimento Sentimento,
-    List<InsightExtraido> Insights,
+    Tom Tom,
+    List<InfoExtraida> PerfilPessoal,
+    List<EventoExtraido> Eventos,
+    List<InfoExtraida> Financeiro,
     List<AcaoExtraida> Acoes,
     List<string> PautasSugeridas);
 
-public record InsightExtraido(
-    CategoriaInsight Categoria,
-    string Conteudo,
-    string TrechoDeOrigem,
-    DateOnly? DataReferencia,
-    bool RecorrenteAnual);
-
-public record AcaoExtraida(string Descricao, DateOnly? Data);
+public record InfoExtraida(string Conteudo, string TrechoOrigem, List<string> Tags);
+public record EventoExtraido(string Conteudo, DateOnly? DataEvento, string TrechoOrigem, List<string> Tags);
+public record AcaoExtraida(string Descricao, DateOnly? Data, List<string> Tags);
 ```
 
-Enums (gravados como texto no banco, com o nome do enum):
+Enums em C#, convertidos para minúsculas ao gravar:
 
-- `StatusConversa`: `NaFila`, `Transcrevendo`, `Analisando`, `Concluida`, `Erro`
-- `OrigemConversa`: `Audio`, `Texto`
-- `Sentimento`: `Satisfeito`, `Alinhado`, `Neutro`, `NecessitaAtencao`
-- `CategoriaInsight`: `Familia`, `Hobby`, `Objetivo`, `Evento`, `Profissional`, `Outro`
+- `StatusConversa`: `Aguardando`, `Transcrevendo`, `Analisando`, `Concluido`, `Erro`
+- `Tom`: `Satisfeito`, `Alinhado`, `Neutro`, `Atencao`
 - `StatusRevisao`: `Pendente`, `Aprovado`, `Descartado`
-
-## Ordem de trabalho
-
-**Sozinho:** setup → 01 → 02 só com texto → 03 → 04 (tela do cliente) → 02 com áudio → 04 (painel e polimento). O spike de 15 minutos do Whisper acontece no setup, para o problema de hardware aparecer cedo.
-
-**Em time**, depois de 01 pronto (schema + contratos + fakes):
-
-| Trilha | Planos | Depende de |
-|---|---|---|
-| A — Pipeline e Whisper | 02 | contratos |
-| B — IA | 03 | contratos |
-| C — Telas | 04 | contratos + fakes + seed |
+- `StatusConclusao`: `Pendente`, `Concluido`
 
 ## Linha de corte
 
 | Prioridade | Itens |
 |---|---|
-| **Precisa ter** | Cliente, entrada por texto, análise, revisão de insights (aprovar/descartar), perfil do cliente, entrada por áudio com Whisper |
-| **Deveria ter** | Painel com to-dos e datas, edição de insight na revisão, linha do tempo, dedupe via fatos conhecidos, MP3/M4A |
-| **Se sobrar tempo** | Pautas na Home, contagem regressiva, drag-and-drop, botão de reprocessar, upload de `.txt` |
+| **Precisa ter** | Cliente, entrada por texto, análise, revisão (aprovar/descartar), perfil do cliente, entrada por áudio com Whisper |
+| **Deveria ter** | Painel com to-dos e datas, edição na revisão, linha do tempo, dedupe via fatos conhecidos, MP3/M4A |
+| **Se sobrar tempo** | Pautas na Home, contagem regressiva, drag-and-drop, upload de `.txt` |
 
 Se às 5h o áudio ainda não estiver estável, a demo segue com texto e um áudio curto já processado no seed.
 
-## Ponto para o pitch: privacidade
+## Pontos para o pitch
 
-A transcrição é offline, mas o texto vai para a OpenAI. Para dados de cliente de corretora isso vai ser perguntado. Resposta para a banca: a demo usa dados fictícios, e a análise está atrás de `IConversationAnalysisService`, então trocar por um modelo local ou por um endpoint corporativo é troca de uma classe. Mascarar CPF e número de conta antes do envio fica como próximo passo, fora do MVP.
+**Privacidade.** A transcrição é offline, mas o texto vai para a OpenAI. Para dados de cliente de corretora isso vai ser perguntado. Resposta para a banca: a demo usa dados fictícios, e a análise está atrás de `IConversationAnalysisService`, então trocar por um modelo local ou por um endpoint corporativo é troca de uma classe. Mascarar CPF e número de conta antes do envio fica como próximo passo.
+
+**Informação financeira sem recomendação.** A tabela `informacao_financeiro` registra o que o cliente disse (objetivos, preocupações, patrimônio citado). O sistema não classifica perfil de risco nem sugere investimento, que continuam fora do escopo do `contexto/01`. O prompt do [03](03-analise-ia.md) deixa isso explícito.
