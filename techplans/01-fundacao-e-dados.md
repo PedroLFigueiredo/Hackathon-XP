@@ -58,7 +58,7 @@ O DDL está em `schema.sql` na raiz e não é repetido aqui. Sem migrations do E
 
 | Tabela | Entidade | Observações |
 |---|---|---|
-| `clientes` | `Cliente` | `tom` guarda o tom mais recente |
+| `clientes` | `Cliente` | `personalidade` e `perfil_financeiro` são texto, opcionais, preenchidos pela análise |
 | `conversas` | `Conversa` | `data` é `timestamptz`; `caminho_audio` nulo = entrada por texto; `resumo` é texto com um bullet por linha |
 | `perfil_pessoal` | `PerfilPessoal` | tem `conversa_id` |
 | `informacao_eventos` | `InformacaoEvento` | tem `data_evento`; sem `conversa_id` |
@@ -71,7 +71,7 @@ O DDL está em `schema.sql` na raiz e não é repetido aqui. Sem migrations do E
 - [ ] Entidades em `Models/`, com as propriedades em PascalCase batendo com as colunas (`CaminhoAudio`, `MensagemErro`, `TrechoOrigem`, `StatusRevisao`, `DataEvento`, `DataOpcional`, `StatusConclusao`). `Tags` é `List<string>`, que o Npgsql mapeia para `text[]`.
 - [ ] Interface `IRevisavel` (`Id`, `ClienteId`, `Conteudo`, `TrechoOrigem`, `Tags`, `StatusRevisao`) implementada por `PerfilPessoal`, `InformacaoEvento` e `InformacaoFinanceiro`, para a revisão tratar as três tabelas com o mesmo código
 - [ ] `AppDbContext` com `UseNpgsql(...).UseSnakeCaseNamingConvention()` e `ToTable(...)` explícito para as seis tabelas
-- [ ] Enums gravados em minúsculas: um `ValueConverter` genérico (`v.ToString().ToLowerInvariant()` na ida, `Enum.Parse` ignorando maiúsculas na volta) aplicado a `StatusConversa`, `Tom`, `StatusRevisao` e `StatusConclusao`
+- [ ] Enums gravados em minúsculas: um `ValueConverter` genérico (`v.ToString().ToLowerInvariant()` na ida, `Enum.Parse` ignorando maiúsculas na volta) aplicado a `StatusConversa`, `Tom`, `Personalidade`, `PerfilFinanceiro`, `StatusRevisao` e `StatusConclusao`
 - [ ] `conversas.data` como `DateTime` sempre em UTC. O Npgsql recusa gravar em `timestamptz` um valor que não seja UTC.
 - [ ] Comando `dotnet run -- --init-db`: apaga as seis tabelas, roda o `schema.sql` da raiz e o `db/seed.sql`, e encerra. É destrutivo; serve para criar o banco e para voltar ao seed limpo antes da demo.
 - [ ] Contratos do [00](00-visao-geral.md) em `Services/`

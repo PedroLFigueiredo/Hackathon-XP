@@ -42,6 +42,8 @@ Valores que a tela precisa conhecer (todos em minúsculas no banco, conforme o `
 
 - `conversas.status`: `aguardando`, `transcrevendo`, `analisando`, `concluido`, `erro`
 - `tom`: `satisfeito`, `alinhado`, `neutro`, `atencao`
+- `clientes.personalidade`: `analitico`, `comunicativo`, `impetuoso`, `reservado` (pode ser nulo)
+- `clientes.perfil_financeiro`: `conservador`, `moderado`, `arrojado` (pode ser nulo)
 - `acoes.status_conclusao`: `pendente`, `concluido`
 - Tags reservadas: `pauta` em `acoes`, `anual` em `informacao_eventos`; a primeira tag de cada item define o grupo na tela
 
@@ -52,6 +54,7 @@ Valores que a tela precisa conhecer (todos em minúsculas no banco, conforme o `
 Plano: [04](04-telas.md), Tela 2. Substitui o formulário cru da base.
 
 - [ ] Cabeçalho com nome, e-mail, telefone, identificador do CRM, voltar à lista e botão "Exportar perfil" (JSON com cadastro, informações, tarefas e histórico)
+- [ ] No cabeçalho, quando houver: `personalidade` com o rótulo "estimada pela IA" e `perfil_financeiro` com o rótulo "citado em conversa — não substitui o suitability"
 - [ ] Botão "Adicionar conversa" abre um cartão recolhível com abas Áudio e Texto e campo de data em comum (padrão hoje)
   - Áudio: seletor (`.wav`, `.mp3`, `.m4a`), `enctype="multipart/form-data"`, `[RequestSizeLimit(200_000_000)]` e `[RequestFormLimits(MultipartBodyLengthLimit = 200_000_000)]` no PageModel; arrastar e soltar é opcional
   - Texto: `textarea` com mínimo de ~50 caracteres

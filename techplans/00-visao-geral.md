@@ -6,6 +6,8 @@ A sequência de execução está em [EXECUCAO.md](EXECUCAO.md): uma base feita p
 
 **O modelo de dados é o `schema.sql` da raiz do repositório.** Ele é a fonte de verdade; os planos se adaptam a ele, não o contrário.
 
+> **Divergência em aberto.** O código que está na `main` não usa este schema. Ele roda sobre `MemoriaRelacionamento/db/schema.sql`, com quatro tabelas (`cliente`, `conversa`, `informacao_insight`, `acao_todo`), `crm_id` no cliente e sem coluna de revisão. O `schema.sql` da raiz tem seis tabelas, não tem `crm_id` e nenhum código o usa ainda. O time precisa escolher um dos dois antes de implementar a análise real; estes planos descrevem o da raiz.
+
 | Plano | Entrega | Estimativa |
 |---|---|---|
 | [01 — Fundação e dados](01-fundacao-e-dados.md) | Projeto rodando, mapeamento do schema, CRUD de clientes, seed | 1h15 |
@@ -57,7 +59,9 @@ Não há coluna de origem: conversa com `caminho_audio` nulo veio por texto.
 
 | Necessidade | Onde fica no schema |
 |---|---|
-| Tom da última reunião | `conversas.tom`; `clientes.tom` guarda o tom mais recente, atualizado quando uma conversa conclui |
+| Tom da última reunião | `conversas.tom` |
+| Estilo do cliente na conversa | `clientes.personalidade`, estimada pela IA e atualizada quando uma conversa conclui |
+| Perfil de investidor | `clientes.perfil_financeiro`. A IA só registra o perfil quando ele é dito na conversa; não deduz (ver "Pontos para o pitch") |
 | Resumo em 3 bullets | `conversas.resumo`, um bullet por linha |
 | Família, hobbies, estilo de vida | `perfil_pessoal`, agrupado pela primeira tag |
 | Datas importantes e próximos eventos | `informacao_eventos.data_evento`; a tag `anual` marca o que se repete todo ano (aniversários) |
@@ -69,14 +73,16 @@ Não há coluna de origem: conversa com `caminho_audio` nulo veio por texto.
 
 ### Ajustes feitos no `schema.sql`
 
-Só os dois sem os quais o MVP não funciona:
+Só os dois sem os quais o MVP não funciona (reaplicados na versão que trouxe `perfil_financeiro` e `personalidade`):
 
 1. Faltava a vírgula depois de `email TEXT` em `clientes`; o script nem rodava.
 2. `conversas.caminho_audio` deixou de ser `NOT NULL`, porque a conversa que entra por texto não tem áudio.
 
 Se as tabelas já foram criadas no Supabase com a versão anterior: `ALTER TABLE conversas ALTER COLUMN caminho_audio DROP NOT NULL;`
 
-### Sugestão não aplicada
+### Sugestões não aplicadas
+
+`clientes` não tem `crm_id`. A carga de `/Demo` e a sincronização por CSV que já estão no código identificam o cliente por essa coluna, com unicidade; sem ela, essas duas funções não rodam sobre este schema.
 
 `informacao_eventos` e `informacao_financeiro` não têm `conversa_id` (a `perfil_pessoal` tem). O MVP funciona sem, mas não dá para saber de qual reunião veio um evento nem limpar os pendentes de uma conversa ao reprocessá-la. Por isso o reprocessamento ficou fora do escopo.
 
@@ -86,6 +92,8 @@ Gravados em minúsculas e sem acento, como nos comentários do schema:
 
 - `conversas.status`: `aguardando`, `transcrevendo`, `analisando`, `concluido`, `erro`
 - `tom`: `satisfeito`, `alinhado`, `neutro`, `atencao`
+- `clientes.personalidade`: `analitico`, `comunicativo`, `impetuoso`, `reservado`
+- `clientes.perfil_financeiro`: `conservador`, `moderado`, `arrojado`
 - `status_revisao`: `pendente`, `aprovado`, `descartado`
 - `acoes.status_conclusao`: `pendente`, `concluido`
 
@@ -122,6 +130,8 @@ public record AnaliseRequest(
 public record AnaliseConversa(
     List<string> Resumo,
     Tom Tom,
+    Personalidade? Personalidade,
+    PerfilFinanceiro? PerfilFinanceiro,
     List<InfoExtraida> PerfilPessoal,
     List<EventoExtraido> Eventos,
     List<InfoExtraida> Financeiro,
@@ -137,6 +147,8 @@ Enums em C#, convertidos para minúsculas ao gravar:
 
 - `StatusConversa`: `Aguardando`, `Transcrevendo`, `Analisando`, `Concluido`, `Erro`
 - `Tom`: `Satisfeito`, `Alinhado`, `Neutro`, `Atencao`
+- `Personalidade`: `Analitico`, `Comunicativo`, `Impetuoso`, `Reservado`
+- `PerfilFinanceiro`: `Conservador`, `Moderado`, `Arrojado`
 - `StatusRevisao`: `Pendente`, `Aprovado`, `Descartado`
 - `StatusConclusao`: `Pendente`, `Concluido`
 
@@ -155,3 +167,5 @@ Se às 5h o áudio ainda não estiver estável, a demo segue com texto e um áud
 **Privacidade.** A transcrição é offline, mas o texto vai para a OpenAI. Para dados de cliente de corretora isso vai ser perguntado. Resposta para a banca: a demo usa dados fictícios, e a análise está atrás de `IConversationAnalysisService`, então trocar por um modelo local ou por um endpoint corporativo é troca de uma classe. Mascarar CPF e número de conta antes do envio fica como próximo passo.
 
 **Informação financeira sem recomendação.** A tabela `informacao_financeiro` registra o que o cliente disse (objetivos, preocupações, patrimônio citado). O sistema não classifica perfil de risco nem sugere investimento, que continuam fora do escopo do `contexto/01`. O prompt do [03](03-analise-ia.md) deixa isso explícito.
+
+**`perfil_financeiro` não é suitability.** Conservador, moderado e arrojado são as categorias do perfil de investidor, que numa corretora sai de um questionário regulado, não de uma conversa. Se a IA deduzisse esse campo, o MVP faria exatamente a "classificação automática de perfil de risco" que o `contexto/01` excluiu. Por isso a IA só preenche o campo quando o perfil é dito com todas as letras na reunião, e devolve `null` no resto. Se o time quiser que a IA estime, é uma mudança de escopo consciente, e a tela precisa rotular como "percepção da conversa, não substitui o suitability". `personalidade` é diferente: é estilo de comunicação, vai rotulada como "estimada pela IA".

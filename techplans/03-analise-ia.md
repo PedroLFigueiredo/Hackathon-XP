@@ -1,6 +1,6 @@
 # 03. Análise por IA
 
-**Objetivo:** transformar uma transcrição (vinda do Whisper ou colada) em resumo, tom, informações pessoais, eventos, informações financeiras, ações e pautas, com saída em JSON estrito.
+**Objetivo:** transformar uma transcrição (vinda do Whisper ou colada) em resumo, tom, personalidade, informações pessoais, eventos, informações financeiras, ações e pautas, com saída em JSON estrito.
 
 **Estimativa:** 1h00.
 
@@ -14,6 +14,8 @@ Structured Outputs com `strict: true`. Todos os campos são obrigatórios; os op
 {
   "resumo": ["frase 1", "frase 2", "frase 3"],
   "tom": "satisfeito | alinhado | neutro | atencao",
+  "personalidade": "analitico | comunicativo | impetuoso | reservado | null",
+  "perfil_financeiro": "conservador | moderado | arrojado | null",
   "perfil_pessoal": [
     {
       "conteudo": "Filha Marina está estudando para o vestibular de medicina",
@@ -43,7 +45,7 @@ Structured Outputs com `strict: true`. Todos os campos são obrigatórios; os op
 }
 ```
 
-O schema JSON correspondente fica numa constante ao lado do serviço, com `enum` em `tom`, `"type": ["string", "null"]` nas datas e `additionalProperties: false` em todos os objetos.
+O schema JSON correspondente fica numa constante ao lado do serviço, com `enum` em `tom`, `personalidade` e `perfil_financeiro` (os dois últimos aceitando `null`), `"type": ["string", "null"]` nas datas e `additionalProperties: false` em todos os objetos.
 
 ## Prompt de sistema (rascunho)
 
@@ -56,6 +58,13 @@ Cliente: {nome}. Data da reunião: {data}.
 Extraia:
 - resumo: exatamente 3 frases curtas sobre o que foi tratado.
 - tom: o tom geral do cliente na conversa.
+- personalidade: o estilo de comunicação do cliente nesta conversa (analitico,
+  comunicativo, impetuoso ou reservado). Se a conversa for curta demais para dizer,
+  use null.
+- perfil_financeiro: preencha SOMENTE se o cliente ou o assessor disser com todas as
+  letras qual é o perfil de investidor do cliente (conservador, moderado ou arrojado).
+  Não deduza a partir do comportamento, dos produtos citados ou do patrimônio. Sem
+  menção explícita, use null.
 - perfil_pessoal: fatos sobre a vida do CLIENTE (família, hobbies, estilo de vida,
   trabalho, objetivos de vida). Não registre fatos sobre o assessor.
 - eventos: datas e acontecimentos da vida do cliente (aniversários, viagens,
@@ -93,7 +102,9 @@ Feito no `ConversaProcessor`, tudo num único `SaveChanges`, junto com o status 
 | Campo do JSON | Destino |
 |---|---|
 | `resumo` | `conversas.resumo`, os bullets unidos por quebra de linha |
-| `tom` | `conversas.tom`; e `clientes.tom`, se esta for a conversa mais recente do cliente |
+| `tom` | `conversas.tom` |
+| `personalidade` | `clientes.personalidade`, só quando não for `null` e esta for a conversa mais recente do cliente |
+| `perfil_financeiro` | `clientes.perfil_financeiro`, nas mesmas condições. `null` nunca apaga o valor que já existe |
 | `perfil_pessoal[]` | `perfil_pessoal` com `conversa_id` e `status_revisao = pendente` |
 | `eventos[]` | `informacao_eventos` com `status_revisao = pendente` |
 | `financeiro[]` | `informacao_financeiro` com `status_revisao = pendente` |
@@ -116,6 +127,7 @@ Feito no `ConversaProcessor`, tudo num único `SaveChanges`, junto com o status 
 - A transcrição rica gera ao menos um item em `perfil_pessoal` com tag `familia`, um evento com data, um item financeiro e uma ação
 - A transcrição só de negócios devolve `perfil_pessoal` vazio ou quase vazio, sem fatos inventados
 - Nenhum item financeiro contém recomendação de investimento ou classificação de perfil de risco
+- `perfil_financeiro` vem `null` numa conversa em que o perfil não é dito, mesmo que o cliente fale de ações ou de renda fixa; e vem preenchido quando o cliente diz "meu perfil é moderado"
 - Todo item tem um `trecho_origem` que aparece na transcrição
 - Analisar uma segunda conversa do mesmo cliente, com os itens da primeira já aprovados, não recria os mesmos fatos
 - Com a chave inválida, a conversa vai para `erro` com mensagem compreensível e nada é gravado nas tabelas de informação

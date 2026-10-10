@@ -96,7 +96,7 @@ Plano: [01](01-fundacao-e-dados.md).
 Planos: [02](02-ingestao-audio-e-texto.md), Parte 1; mapeamento no [03](03-analise-ia.md).
 
 - [ ] `ConversaQueue`, `ConversaProcessor`, `ConversaWorker`
-- [ ] Mapeamento do resultado da análise para `conversas`, `clientes.tom`, `perfil_pessoal`, `informacao_eventos`, `informacao_financeiro` e `acoes` (pautas entram em `acoes` com a tag `pauta`), tudo num único `SaveChanges`
+- [ ] Mapeamento do resultado da análise para `conversas`, `clientes.personalidade`, `clientes.perfil_financeiro`, `perfil_pessoal`, `informacao_eventos`, `informacao_financeiro` e `acoes` (pautas entram em `acoes` com a tag `pauta`), tudo num único `SaveChanges`
 - [ ] Recuperação no startup das conversas presas, desligável por `Pipeline:RecuperarNoStartup`
 - [ ] `ConversaService`, o ponto de contato único entre tela e pipeline:
   ```csharp
@@ -106,7 +106,7 @@ Planos: [02](02-ingestao-audio-e-texto.md), Parte 1; mapeamento no [03](03-anali
 - [ ] `GET /api/conversas/{id}/status` devolvendo `{ status, mensagemErro }`
 - [ ] No detalhe do cliente, um formulário cru (sem estilo) com data, `textarea` e campo de arquivo, chamando os dois métodos do `ConversaService`
 
-**Pronto quando:** pelo formulário cru, um texto chega a `concluido` sem passar por `transcrevendo`, e um arquivo de áudio passa por `transcrevendo` → `analisando` → `concluido`. Em ambos os casos os itens do fake aparecem nas quatro tabelas de destino e `clientes.tom` é atualizado.
+**Pronto quando:** pelo formulário cru, um texto chega a `concluido` sem passar por `transcrevendo`, e um arquivo de áudio passa por `transcrevendo` → `analisando` → `concluido`. Em ambos os casos os itens do fake aparecem nas quatro tabelas de destino e `clientes.personalidade` é atualizada.
 
 ## Bifurcação
 
