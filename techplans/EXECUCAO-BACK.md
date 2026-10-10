@@ -24,7 +24,7 @@ Para o Claude que roda em `C:\Users\figue\Hackathon-XP`, na branch `back`. Come�
 Plano: [03](03-analise-ia.md).
 
 - [ ] Pacote `OpenAI`
-- [ ] Schema JSON estrito (constante ao lado do serviço) com `perfil_pessoal`, `eventos`, `financeiro`, `acoes` e `pautas_sugeridas`, e o prompt de sistema
+- [ ] Schema JSON estrito (constante ao lado do serviço) com `resumo`, `tom`, `personalidade`, `perfil_financeiro`, `perfil_pessoal`, `eventos`, `financeiro`, `acoes` e `pautas_sugeridas`, e o prompt de sistema
 - [ ] `OpenAiConversationAnalysisService`: `gpt-4o-mini`, temperatura 0,2, `json_schema` com `strict: true`, chave em `OPENAI_API_KEY`
 - [ ] Recusa ou resposta truncada viram exceção com mensagem legível
 - [ ] `FatosJaConhecidos` montado no `ConversaProcessor` a partir dos itens `aprovado` do cliente nas três tabelas de informação
@@ -35,6 +35,7 @@ Plano: [03](03-analise-ia.md).
 - a transcrição rica gera ao menos um item em `perfil_pessoal` com tag `familia`, um evento com data, um item financeiro e uma ação;
 - todo item tem `trecho_origem` que aparece no texto;
 - nenhum item financeiro traz recomendação de investimento ou classificação de perfil de risco;
+- `perfil_financeiro` vem `null` quando o perfil não é dito na conversa, e preenchido quando o cliente o declara;
 - a transcrição só de negócios não gera fatos pessoais inventados;
 - uma segunda conversa do mesmo cliente, com os itens da primeira já aprovados, não recria os mesmos fatos;
 - com a chave inválida a conversa vai para `erro` com mensagem compreensível e nada é gravado nas tabelas de informação.

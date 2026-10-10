@@ -4,7 +4,8 @@ CREATE TABLE clientes (
     nome TEXT NOT NULL,
     telefone TEXT,
     email TEXT,
-    tom TEXT
+    perfil_financeiro TEXT, -- Ex: Conservador, Moderado, Arrojado
+    personalidade TEXT      -- Ex: Analítico, Comunicativo, Impetuoso, Reservado
 );
 
 -- Tabela: Conversas

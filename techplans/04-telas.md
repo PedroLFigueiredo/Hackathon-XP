@@ -12,6 +12,12 @@ Bootstrap do template padrão, sem framework de front. Ações são formulários
 
 É onde o fluxo principal da demo acontece.
 
+### Cabeçalho
+
+- [ ] Nome e contato do cliente
+- [ ] `personalidade`, quando houver, com o rótulo "estimada pela IA"
+- [ ] `perfil_financeiro`, quando houver, com o rótulo "citado em conversa — não substitui o suitability"
+
 ### Nova conversa
 
 Um cartão com duas abas e um campo de data em comum (padrão hoje):
@@ -57,7 +63,7 @@ Mostra **só itens `aprovado`**.
   - Datas importantes: `informacao_eventos` aprovados de toda a carteira com data nos próximos 30 dias (próxima ocorrência para a tag `anual`), com nome do cliente e link para o perfil
   - Pautas sugeridas: `acoes` pendentes com a tag `pauta`, com o cliente. Marcar como concluída tira da lista.
 - [ ] **Widget 2 — Tarefas pendentes:** `acoes` pendentes sem a tag `pauta`, com cliente, data (se houver) e checkbox
-- [ ] Carteira: lista de clientes com o selo de `clientes.tom` e o número de itens aguardando revisão; atalho para `/Clientes`
+- [ ] Carteira: lista de clientes com o tom da última conversa (`conversas.tom`), a `personalidade` e o número de itens aguardando revisão; atalho para `/Clientes`
 
 ## Polimento da demo
 
