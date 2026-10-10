@@ -147,12 +147,56 @@ As tarefas e pautas já existem. A melhoria é o sistema avisar o assessor na ho
 
 ---
 
+## 5. Autenticação e separação de carteira por assessor
+ 
+### Ideia
+Hoje a aplicação não tem login. Qualquer pessoa que abrir o sistema vê todos os clientes, conversas e transcrições, incluindo dados sensíveis (saúde da família, situação financeira). A melhoria é exigir login e fazer cada assessor ver apenas os seus clientes.
+ 
+### O que isso resolveria
+- Impede acesso de pessoas não autorizadas.
+- Cada assessor vê só a sua carteira.
+- Protege dados sensíveis, ajudando na LGPD.
+- Permite registrar quem fez cada ação.
+- Libera as outras ideias deste documento (pré-chat, Open Finance, notificações).
+
+### Como funcionaria
+1. Login com ASP.NET Core Identity ou com Supabase Auth (que o projeto já usa).
+2. Nova tabela `Assessor`, e campo `assessor_id` na tabela `Cliente`.
+3. Todas as consultas filtram pelo `assessor_id` do usuário logado (clientes, conversas, insights, tarefas, memória).
+4. Páginas protegidas com `[Authorize]`, incluindo o endpoint `/api/conversas/{id}/status`.
+5. No Supabase, ativar Row Level Security (RLS) nas tabelas, para o próprio banco bloquear acesso indevido.
+6. Acesso aos arquivos de áudio também só para o dono da conversa.
+
+### Como se encaixa no sistema atual
+- A listagem `/Clientes` passa a mostrar só os clientes do assessor logado.
+- Perfil, Insights e Demonstração também respeitam o filtro.
+- A carga de clientes fictícios cria os cadastros para o assessor logado.
+- O worker de processamento não muda, mas deve guardar o `assessor_id` junto da conversa.
+
+### Cuidados
+- **IDOR:** a verificação de dono precisa ser feita no servidor. Esconder o botão não basta, porque alguém pode abrir `/Clientes/Detalhe/5` direto pela URL e ver o cliente de outro assessor.
+- Usar HTTPS e cookies seguros (`HttpOnly`, `Secure`).
+- Não guardar chaves (OpenAI, Supabase) no código nem no repositório. Usar variáveis de ambiente ou user secrets.
+- Limitar tentativas de login para evitar força bruta.
+- Áudios ficam em disco na máquina local. Definir quem acessa essa máquina e por quanto tempo os arquivos são mantidos.
+- Dados já existentes no banco precisam ser ligados a um assessor na migração.
+  
+### Etapas sugeridas
+1. Criar login simples e a tabela `Assessor`.
+2. Adicionar `assessor_id` em `Cliente` e filtrar as consultas.
+3. Proteger páginas e o endpoint de status.
+4. Ativar RLS no Supabase.
+5. Revisar segredos, HTTPS e política de retenção de áudios.
+   
+---
+
 ## Ordem sugerida
 
-1. **Notificações** (4): usa dados que já existem e dá valor rápido.
-2. **Chat do assessor** (2): reaproveita Whisper e os dados atuais.
-3. **Pré-chat gamificado** (1): precisa de acesso do cliente e cuidado com LGPD.
-4. **Open Finance** (3): maior impacto, mas depende de regulação e segurança.
+1. **Autenticação (5):** pré-requisito das outras ideias.
+2. **Notificações** (4): usa dados que já existem e dá valor rápido.
+3. **Chat do assessor** (2): reaproveita Whisper e os dados atuais.
+4. **Pré-chat gamificado** (1): precisa de acesso do cliente e cuidado com LGPD.
+5. **Open Finance** (3): maior impacto, mas depende de regulação e segurança.
 
 ## Pré-requisitos em comum
 
