@@ -1,108 +1,92 @@
 # 01. Fundação e Dados
 
-**Objetivo:** projeto rodando, banco criado, clientes cadastráveis e os contratos do [00](00-visao-geral.md) no código, com implementações falsas para destravar as outras trilhas.
+**Objetivo:** projeto rodando, o `schema.sql` do time mapeado no EF Core, clientes cadastráveis e os contratos do [00](00-visao-geral.md) no código, com implementações falsas para destravar as outras trilhas.
 
 **Estimativa:** 30 min de setup + 1h15.
 
 ## Setup (30 min)
 
 - [ ] `winget install Microsoft.DotNet.SDK.8` e conferir com `dotnet --list-sdks`
-- [ ] Criar o projeto Supabase e copiar a connection string do **Session pooler** (porta 5432). A conexão direta do Supabase é só IPv6 e costuma falhar em rede comum.
-- [ ] Criar a chave da OpenAI
+- [ ] No `.env` da raiz: trocar `[YOUR-PASSWORD]` pela senha do banco e preencher `OPENAI_API_KEY`
 - [ ] `dotnet new webapp -n MemoriaRelacionamento -f net8.0` na raiz do repo
-- [ ] `.gitignore` (`dotnet new gitignore`) acrescido de `models/` e `uploads/`
-- [ ] Segredos:
-  ```
-  dotnet user-secrets init
-  dotnet user-secrets set "ConnectionStrings:Supabase" "Host=...;Port=5432;Database=postgres;Username=postgres.xxxx;Password=...;SSL Mode=Require"
-  dotnet user-secrets set "OpenAI:ApiKey" "sk-..."
-  ```
+- [ ] Conferir o `.gitignore` da raiz (já cobre `.env`, `models/`, `uploads/`, `bin/`, `obj/`)
 - [ ] Spike do Whisper (15 min, detalhado no [02](02-ingestao-audio-e-texto.md)) para medir a velocidade antes de se comprometer com o modelo
 
-## Estrutura do projeto
+## Estrutura
 
 ```
-MemoriaRelacionamento/
-  Program.cs
-  Data/AppDbContext.cs
-  Models/            Cliente, Conversa, InformacaoInsight, AcaoToDo, enums
-  Services/          contratos, fakes, Whisper, OpenAI, fila e worker
-  Pages/             Index, Clientes/Index, Clientes/Detalhe
-  db/schema.sql
-  db/seed.sql
-  models/            modelo ggml (fora do git)
-  uploads/           áudios enviados (fora do git)
+Hackathon-XP/
+  .env                 segredos (fora do git)
+  .env.example         modelo versionado
+  schema.sql           fonte de verdade do banco (feito pelo time)
+  contexto/  techplans/
+  MemoriaRelacionamento/
+    Program.cs
+    Data/AppDbContext.cs
+    Models/            entidades e enums
+    Services/          contratos, fakes, Whisper, OpenAI, fila e worker
+    Pages/             Index, Clientes/Index, Clientes/Detalhe
+    db/seed.sql
+    models/            modelo ggml (fora do git)
+    uploads/           áudios enviados (fora do git)
 ```
 
-## Schema (`db/schema.sql`)
+## Configuração e segredos
 
-Sem migrations do EF: o schema é este arquivo, o EF só mapeia. O comando `dotnet run -- --init-db` aplica `schema.sql` e `seed.sql` pelo Npgsql e encerra; colar no SQL Editor do Supabase também funciona.
+- [ ] Pacote `DotNetEnv`. No começo do `Program.cs`: `Env.TraversePaths().Load();`, que procura o `.env` subindo as pastas a partir do diretório atual
+- [ ] Converter `DATABASE_URL` (formato URI) para o formato do Npgsql, que não aceita URI:
+  ```csharp
+  var uri = new Uri(Environment.GetEnvironmentVariable("DATABASE_URL")!);
+  var credenciais = uri.UserInfo.Split(':', 2);
+  var connectionString = new NpgsqlConnectionStringBuilder
+  {
+      Host = uri.Host,
+      Port = uri.Port,
+      Database = uri.AbsolutePath.TrimStart('/'),
+      Username = credenciais[0],
+      Password = Uri.UnescapeDataString(credenciais[1]),
+      SslMode = SslMode.Require,
+  }.ConnectionString;
+  ```
+- [ ] `OPENAI_API_KEY` lida da variável de ambiente
+- [ ] Sem `DATABASE_URL`, ou ainda com `[YOUR-PASSWORD]`, falhar no startup com mensagem dizendo o que preencher no `.env`
+- [ ] Configuração que não é segredo fica no `appsettings.Development.json`: `Fakes:Transcricao`, `Fakes:Analise`, `Whisper:ModelPath`, `Pipeline:RecuperarNoStartup`
 
-```sql
-create table cliente (
-  id uuid primary key default gen_random_uuid(),
-  nome text not null,
-  telefone text,
-  email text,
-  criado_em timestamptz not null default now()
-);
+## Mapeamento do schema
 
-create table conversa (
-  id uuid primary key default gen_random_uuid(),
-  cliente_id uuid not null references cliente(id) on delete cascade,
-  data date not null,                 -- data da reunião
-  origem text not null,               -- Audio | Texto
-  caminho_do_audio text,              -- null quando origem = Texto
-  status text not null default 'NaFila',
-  transcricao text,
-  resumo text[],
-  sentimento text,
-  pautas_sugeridas text[],
-  mensagem_de_erro text,
-  criado_em timestamptz not null default now()
-);
+O DDL está em `schema.sql` na raiz e não é repetido aqui. Sem migrations do EF: o EF só mapeia.
 
-create table informacao_insight (
-  id uuid primary key default gen_random_uuid(),
-  cliente_id uuid not null references cliente(id) on delete cascade,
-  conversa_id uuid not null references conversa(id) on delete cascade,
-  categoria text not null,
-  conteudo text not null,
-  trecho_de_origem text,
-  data_referencia date,
-  recorrente_anual boolean not null default false,
-  status_de_revisao text not null default 'Pendente'
-);
-
-create table acao_todo (
-  id uuid primary key default gen_random_uuid(),
-  cliente_id uuid not null references cliente(id) on delete cascade,
-  conversa_id uuid references conversa(id) on delete cascade,
-  descricao text not null,
-  data_opcional date,
-  concluida boolean not null default false
-);
-
-create index on conversa (cliente_id, data desc);
-create index on informacao_insight (cliente_id, status_de_revisao);
-create index on acao_todo (concluida);
-```
-
-Diferenças em relação ao `contexto/02`: `origem`, `pautas_sugeridas`, `data_referencia`, `recorrente_anual`, `criado_em`; `resumo` virou array; `status_de_conclusao` virou o booleano `concluida`.
+| Tabela | Entidade | Observações |
+|---|---|---|
+| `clientes` | `Cliente` | `tom` guarda o tom mais recente |
+| `conversas` | `Conversa` | `data` é `timestamptz`; `caminho_audio` nulo = entrada por texto; `resumo` é texto com um bullet por linha |
+| `perfil_pessoal` | `PerfilPessoal` | tem `conversa_id` |
+| `informacao_eventos` | `InformacaoEvento` | tem `data_evento`; sem `conversa_id` |
+| `informacao_financeiro` | `InformacaoFinanceiro` | sem `conversa_id` |
+| `acoes` | `Acao` | `status_conclusao` é texto; `conversa_id` obrigatório |
 
 ## Passos
 
 - [ ] Pacotes: `Npgsql.EntityFrameworkCore.PostgreSQL` e `EFCore.NamingConventions` (versões 8.x)
-- [ ] Entidades e enums em `Models/`. `DateOnly` para datas, `List<string>` para os arrays.
-- [ ] `AppDbContext` com `UseNpgsql(...).UseSnakeCaseNamingConvention()`, nomes de tabela explícitos (`ToTable("cliente")` etc.) e `HasConversion<string>()` em todos os enums
-- [ ] Comando `--init-db` em `Program.cs`; rodar e validar com um `db.Clientes.CountAsync()` no startup
+- [ ] Entidades em `Models/`, com as propriedades em PascalCase batendo com as colunas (`CaminhoAudio`, `MensagemErro`, `TrechoOrigem`, `StatusRevisao`, `DataEvento`, `DataOpcional`, `StatusConclusao`). `Tags` é `List<string>`, que o Npgsql mapeia para `text[]`.
+- [ ] Interface `IRevisavel` (`Id`, `ClienteId`, `Conteudo`, `TrechoOrigem`, `Tags`, `StatusRevisao`) implementada por `PerfilPessoal`, `InformacaoEvento` e `InformacaoFinanceiro`, para a revisão tratar as três tabelas com o mesmo código
+- [ ] `AppDbContext` com `UseNpgsql(...).UseSnakeCaseNamingConvention()` e `ToTable(...)` explícito para as seis tabelas
+- [ ] Enums gravados em minúsculas: um `ValueConverter` genérico (`v.ToString().ToLowerInvariant()` na ida, `Enum.Parse` ignorando maiúsculas na volta) aplicado a `StatusConversa`, `Tom`, `StatusRevisao` e `StatusConclusao`
+- [ ] `conversas.data` como `DateTime` sempre em UTC. O Npgsql recusa gravar em `timestamptz` um valor que não seja UTC.
+- [ ] Comando `dotnet run -- --init-db`: apaga as seis tabelas, roda o `schema.sql` da raiz e o `db/seed.sql`, e encerra. É destrutivo; serve para criar o banco e para voltar ao seed limpo antes da demo.
 - [ ] Contratos do [00](00-visao-geral.md) em `Services/`
-- [ ] `FakeTranscriptionService` (devolve um texto fixo depois de 3 s) e `FakeConversationAnalysisService` (devolve uma `AnaliseConversa` fixa). Duas flags no `appsettings.Development.json`, `Fakes:Transcricao` e `Fakes:Analise`, escolhem o registro no DI de cada um.
+- [ ] `FakeTranscriptionService` e `FakeConversationAnalysisService`, cada um com 3 s de atraso e resultado fixo, cobrindo as três tabelas de informação, uma ação com data e uma pauta. As flags `Fakes:Transcricao` e `Fakes:Analise` escolhem o registro no DI de cada um.
 - [ ] Página `/Clientes`: lista com link para o perfil e formulário de novo cliente (nome obrigatório)
-- [ ] `db/seed.sql`: 3 clientes fictícios, um deles com uma conversa `Concluida`, insights aprovados (incluindo um aniversário nos próximos dias) e 2 to-dos pendentes
+- [ ] `db/seed.sql` com dados fictícios, rico o bastante para o front trabalhar sozinho:
+  - um cliente com conversa `concluido` e itens `aprovado` nas três tabelas, incluindo um aniversário (tag `anual`) nos próximos dias;
+  - um cliente com conversa `concluido` e itens `pendente` nas três tabelas;
+  - um cliente com conversa em `erro` e `mensagem_erro` preenchida;
+  - um cliente sem nenhuma conversa;
+  - em `acoes`: três tarefas pendentes, uma concluída e duas pautas (tag `pauta`).
 
 ## Critérios de aceite
 
+- `dotnet run -- --init-db` cria as seis tabelas no Supabase e carrega o seed
 - `dotnet run` sobe sem erro e `/Clientes` lista os clientes do seed
 - Criar um cliente pela tela grava no Supabase (conferir no Table Editor)
 - Com as duas flags de fake em `true`, a app sobe sem modelo Whisper e sem chave da OpenAI
@@ -111,6 +95,8 @@ Diferenças em relação ao `contexto/02`: `origem`, `pautas_sugeridas`, `data_r
 
 | Risco | Mitigação |
 |---|---|
-| Conexão recusada ou timeout | Quase sempre é a connection string direta (IPv6). Usar a do Session pooler. |
-| Coluna não encontrada | Nome em snake_case divergente. Conferir o SQL gerado ligando o log do EF em Development. |
-| Erro ao gravar enum | Faltou `HasConversion<string>()`; sem ele o EF grava inteiro em coluna `text`. |
+| Senha com caractere especial quebra a `DATABASE_URL` | Usar URL-encoding na senha (o `.env` tem o lembrete) ou trocar a senha do banco por uma só com letras e números |
+| Conexão recusada ou timeout | Conferir que é a string do Session pooler (`pooler.supabase.com:5432`); a conexão direta é só IPv6 |
+| Coluna não encontrada | Nome da propriedade não bate com a coluna em snake_case. Ligar o log de SQL do EF em Development. |
+| Erro ao ler ou gravar enum | Faltou o conversor de minúsculas; sem ele o EF tenta gravar inteiro em coluna `text` |
+| `Cannot write DateTime with Kind=Local` | `conversas.data` precisa estar em UTC |
