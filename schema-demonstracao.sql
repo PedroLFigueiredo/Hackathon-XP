@@ -63,3 +63,17 @@ CREATE TABLE acoes (
     tags TEXT[], -- Array de tags / palavras-chave
     status_conclusao TEXT NOT NULL DEFAULT 'pendente' -- Ex: pendente, concluido
 );
+
+-- Tabela: Insights do Assessor
+CREATE TABLE IF NOT EXISTS insights_assessor (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      cliente_id UUID NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+      conversa_id UUID NOT NULL REFERENCES conversas(id) ON DELETE CASCADE,
+      tipo TEXT NOT NULL,
+      conteudo TEXT NOT NULL,
+      sugestao TEXT,
+      trecho_origem TEXT
+  );
+
+  -- Ativação de segurança (RLS) para os insights do assessor
+  ALTER TABLE insights_assessor ENABLE ROW LEVEL SECURITY;
