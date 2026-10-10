@@ -286,5 +286,6 @@ Os documentos de contexto descrevem a implementação atual:
 - [Ideia e objetivos](contexto/01-ideia-e-objetivos.md).
 - [Arquitetura e tecnologia](contexto/02-arquitetura-e-tecnologia.md).
 - [Fluxo de telas](contexto/03-fluxo-telas-painel.md).
+- [Ideias futuras](https://github.com/PedroLFigueiredo/Hackathon-XP/blob/main/contexto/04-ideias-futuras.md)
 
 Os arquivos em `techplans/` registram planos de execução e não substituem a documentação atual acima.
