@@ -5,8 +5,18 @@
     <img src="MemoriaRelacionamento/wwwroot/images/xp-logo-dark.webp" alt="XP Inc." width="160">
   </picture>
   <h1>XP Insight</h1>
-  <p><strong>Cada conversa vira contexto para o próximo atendimento.</strong></p>
-  <p>Hackathon XP · .NET 10 · Razor Pages · PostgreSQL / Supabase · Whisper · GPT-4o-mini</p>
+   <p>
+    <strong>Inteligência contextual para relacionamentos financeiros mais personalizados.</strong>
+  </p>
+
+  <p>
+    Cada conversa importa. Cada atendimento evolui.
+    
+  </p>
+     <p>
+    <em>MVP desenvolvido durante o Hackathon XP.</em>
+  </p>
+    .NET 10 · Razor Pages · PostgreSQL / Supabase · Whisper · GPT-4o-mini</p>
 </div>
 
 MVP em C# / .NET 10 e ASP.NET Core Razor Pages, com PostgreSQL/Supabase. Recebe áudio ou texto, transcreve localmente com Whisper e analisa as conversas com GPT-4o-mini para organizar a memória do cliente, identificar sinais relevantes e acompanhar os próximos passos.
