@@ -8,7 +8,7 @@ public static class TranscriptionRegistration
     // A integração do Whisper muda somente este registro e acrescenta a implementação.
     public static IServiceCollection AddTranscription(this IServiceCollection services, IConfiguration configuration)
     {
-        if (configuration.GetValue("Fakes:Transcricao", true))
+        if (configuration.GetValue("Fakes:Transcricao", false))
         {
             services.AddScoped<ITranscriptionService, FakeTranscriptionService>();
             return services;

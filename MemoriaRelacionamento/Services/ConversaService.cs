@@ -8,6 +8,17 @@ public class ConversaService(AppDbContext db, ConversaQueue queue, IWebHostEnvir
 {
     public const long MaxAudioBytes = 200_000_000;
 
+    public async Task ReprocessarAsync(Guid clienteId, Guid conversaId, CancellationToken ct)
+    {
+        var conversa = await db.Conversas.SingleOrDefaultAsync(x => x.Id == conversaId && x.ClienteId == clienteId, ct);
+        if (conversa is null) throw new ArgumentException("Conversa não encontrada.");
+        if (conversa.Status != StatusConversa.Erro) throw new ArgumentException("Esta conversa não está com erro.");
+        conversa.Status = StatusConversa.NaFila;
+        conversa.MensagemDeErro = null;
+        await db.SaveChangesAsync(ct);
+        queue.Enfileirar(conversa.Id);
+    }
+
     public async Task<Guid> CriarDeTextoAsync(Guid clienteId, DateOnly data, string texto, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(texto) || texto.Trim().Length < 50)

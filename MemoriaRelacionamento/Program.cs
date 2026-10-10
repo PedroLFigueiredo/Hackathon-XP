@@ -36,6 +36,12 @@ app.MapGet("/api/conversas/{id:guid}/status", async (Guid id, IServiceProvider s
     var db = services.GetService<AppDbContext>();
     if (db is null) return Results.Problem("Supabase não configurado.", statusCode: 503);
     var conversa = await db.Conversas.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
-    return conversa is null ? Results.NotFound() : Results.Ok(new { status = conversa.Status.ToString(), mensagemDeErro = conversa.MensagemDeErro });
+    return conversa is null ? Results.NotFound() : Results.Ok(new
+    {
+        status = conversa.Status.ToString(),
+        mensagemDeErro = conversa.MensagemDeErro,
+        progresso = conversa.Status == MemoriaRelacionamento.Models.StatusConversa.Transcrevendo
+            ? services.GetRequiredService<TranscriptionProgressStore>().Obter(id) : null
+    });
 });
 app.Run();

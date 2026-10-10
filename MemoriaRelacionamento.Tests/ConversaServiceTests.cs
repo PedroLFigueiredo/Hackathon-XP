@@ -74,6 +74,27 @@ public class ConversaServiceTests : IDisposable
         Assert.False(Directory.Exists(_uploads) && Directory.GetFiles(_uploads).Length > 0);
     }
 
+    [Fact]
+    public async Task Tentar_novamente_reutiliza_conversa_e_preserva_transcricao()
+    {
+        var cli = await _banco.CriarClienteAsync();
+        var id = await Fabrica.ConversaAsync(_banco, cli.Id, OrigemConversa.Texto, "Transcrição completa preservada.");
+        await using var db = _banco.Novo();
+        var conversa = await db.Conversas.SingleAsync(x => x.Id == id);
+        conversa.Status = StatusConversa.Erro;
+        conversa.MensagemDeErro = "Falha anterior";
+        await db.SaveChangesAsync();
+        await Servico(db).ReprocessarAsync(cli.Id, id, default);
+        Assert.Equal(id, await LerComTimeoutAsync(_fila));
+        await using var consulta = _banco.Novo();
+        var resultado = await consulta.Conversas.SingleAsync();
+        Assert.Equal(StatusConversa.NaFila, resultado.Status);
+        Assert.Null(resultado.MensagemDeErro);
+        Assert.Equal("Transcrição completa preservada.", resultado.Transcricao);
+        await Assert.ThrowsAsync<ArgumentException>(() => Servico(db).ReprocessarAsync(Guid.NewGuid(), id, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => Servico(db).ReprocessarAsync(cli.Id, id, default));
+    }
+
     [Theory]
     [InlineData("Reuniao.MP3", ".mp3")]
     [InlineData("a.wav", ".wav")]

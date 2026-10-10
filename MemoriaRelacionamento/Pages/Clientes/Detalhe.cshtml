@@ -1,6 +1,7 @@
 @page "{id:guid}"
 @model MemoriaRelacionamento.Pages.Clientes.DetalheModel
 @using MemoriaRelacionamento.Models
+@inject IConfiguration Configuration
 @{ ViewData["Title"] = Model.Cliente?.Nome ?? "Perfil do cliente"; }
 <a asp-page="Index">← Clientes</a>
 <div asp-validation-summary="All" class="text-danger"></div>
@@ -9,7 +10,14 @@
 {
     <h1>@cliente.Nome</h1>
     <p>@cliente.Email · @cliente.Telefone</p><p>Perfil financeiro: @cliente.PerfilFinanceiro · Personalidade: @cliente.Personalidade</p>
-    <div class="alert alert-warning">Transcrição e análise fictícias nesta base. Os insights entram automaticamente.</div>
+    @if (Configuration.GetValue("Fakes:Transcricao", false) || Configuration.GetValue("Fakes:Analise", false))
+    {
+        <div class="alert alert-warning">Modo de demonstração: transcrição ou análise fictícias estão ativadas.</div>
+    }
+    else
+    {
+        <div class="alert alert-info">O áudio é transcrito localmente. A análise automática ainda não está disponível; confira a transcrição no histórico.</div>
+    }
     <h2>Adicionar conversa</h2>
     <form method="post" asp-page-handler="Texto" class="mb-4">
         <label asp-for="Data">Data da conversa</label><input asp-for="Data" type="date" class="form-control" required />
@@ -25,7 +33,7 @@
     @if (ultima is not null)
     {
         <h2>Última conversa — @ultima.Data.ToString("dd/MM/yyyy")</h2>
-        <p>Tom da conversa — estimado pela IA: @ultima.Sentimento</p>
+        @if (ultima.Sentimento is not null) { <p>Tom da conversa — estimado pela IA: @ultima.Sentimento</p> }
         <ul>@foreach (var item in ultima.Resumo) { <li>@item</li> }</ul>
     }
     <h2>Memória do relacionamento</h2>
@@ -48,8 +56,19 @@
         <div class="border rounded p-3 mb-2">
             <strong>@conversa.Data.ToString("dd/MM/yyyy") · @conversa.Origem</strong>
             <span data-status-id="@conversa.Id" data-status="@conversa.Status">@conversa.Status</span>
-            @if (conversa.Status == StatusConversa.Erro) { <p class="text-danger">@conversa.MensagemDeErro</p> }
-            <details><summary>Transcrição</summary><p style="white-space: pre-wrap">@conversa.Transcricao</p></details>
+            @if (conversa.Transcricao?.StartsWith("Transcrição fictícia de demonstração.", StringComparison.Ordinal) == true)
+            {
+                <p class="text-warning">Esta conversa foi criada com a transcrição de demonstração. Envie o áudio novamente para obter a transcrição real.</p>
+            }
+            @if (conversa.Status == StatusConversa.Erro)
+            {
+                <p class="text-danger">@conversa.MensagemDeErro</p>
+                <form method="post" asp-page-handler="Reprocessar">
+                    <input type="hidden" name="conversaId" value="@conversa.Id" />
+                    <button class="btn btn-primary">Tentar novamente</button>
+                </form>
+            }
+            <details><summary>@(Model.TranscricoesParciais.Contains(conversa.Id) ? "Transcrição parcial — processamento interrompido" : "Transcrição")</summary><p data-transcricao-id="@conversa.Id" style="white-space: pre-wrap">@conversa.Transcricao</p></details>
         </div>
     }
 }
