@@ -4,7 +4,7 @@
     <source media="(prefers-color-scheme: light)" srcset="MemoriaRelacionamento/wwwroot/images/xp-logo-dark.webp">
     <img src="MemoriaRelacionamento/wwwroot/images/xp-logo-dark.webp" alt="XP Inc." width="160">
   </picture>
-  <h1>Memória de Relacionamento</h1>
+  <h1>XP Insight</h1>
   <p><strong>Cada conversa vira contexto para o próximo atendimento.</strong></p>
   <p>Hackathon XP · .NET 10 · Razor Pages · PostgreSQL / Supabase · Whisper · GPT-4o-mini</p>
 </div>
