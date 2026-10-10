@@ -1,18 +1,18 @@
 @page
 @model MemoriaRelacionamento.Pages.Clientes.IndexModel
 @{ ViewData["Title"] = "Clientes"; }
-<h1>Clientes</h1>
+<div class="page-heading"><p class="eyebrow">MEMÓRIA DE RELACIONAMENTO</p><h1>Clientes</h1><p>Cada relacionamento começa com uma boa conversa. Retome o contexto do próximo atendimento.</p></div>
 @if (!Model.BancoConfigurado) { <partial name="_DatabaseNotice" /> }
 else if (Model.Erro is not null) { <div class="alert alert-danger">@Model.Erro</div> }
-else if (Model.Clientes.Count == 0) { <p>Nenhum cliente cadastrado. Importe os dados do CRM quando a sincronização estiver integrada.</p> }
+else if (Model.Clientes.Count == 0) { <p>Nenhum cliente cadastrado. <a asp-page="/Demo">Crie seis clientes fictícios para demonstrar o sistema.</a></p> }
 else
 {
     <table class="table">
-        <thead><tr><th>Nome</th><th>ID no CRM</th><th>E-mail</th><th>Telefone</th><th></th></tr></thead>
+        <thead><tr><th>Nome</th><th>Perfil financeiro</th><th>Personalidade</th><th>E-mail</th><th>Telefone</th><th></th></tr></thead>
         <tbody>
         @foreach (var cliente in Model.Clientes)
         {
-            <tr><td>@cliente.Nome</td><td>@cliente.CrmId</td><td>@cliente.Email</td><td>@cliente.Telefone</td>
+            <tr><td>@cliente.Nome</td><td>@cliente.PerfilFinanceiro</td><td>@cliente.Personalidade</td><td>@cliente.Email</td><td>@cliente.Telefone</td>
             <td><a asp-page="Detalhe" asp-route-id="@cliente.Id">Abrir perfil</a></td></tr>
         }
         </tbody>

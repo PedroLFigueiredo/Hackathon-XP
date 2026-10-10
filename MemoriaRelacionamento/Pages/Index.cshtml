@@ -1,11 +1,31 @@
-﻿@page
+@page
 @model IndexModel
-@{
-    ViewData["Title"] = "Memória de relacionamento";
-}
-
-<h1>Memória de relacionamento</h1>
-<p>Transforme conversas em contexto para o próximo atendimento.</p>
-<p><a class="btn btn-primary" asp-page="/Clientes/Index">Abrir clientes</a></p>
-<div class="alert alert-warning">Base do MVP: transcrição e análise usam serviços fictícios até a integração.</div>
-<p>Importação CSV, painel de prioridades e acabamento das telas seguem o plano de front.</p>
+@{ ViewData["Title"] = "Memória de relacionamento"; }
+<section class="xp-hero">
+    <div class="hero-copy">
+        <p class="eyebrow">INTELIGÊNCIA A SERVIÇO DA ASSESSORIA</p>
+        <h1>Conversas que geram <span>oportunidades.</span></h1>
+        <p class="hero-description">Transforme conversas em memória de relacionamento. Mais contexto para acompanhar seus clientes e dar o próximo passo com confiança.</p>
+        <div class="hero-actions"><a class="btn btn-primary" asp-page="/Clientes/Index">Abrir clientes <span aria-hidden="true">→</span></a><a class="text-action" href="#solucao">Conheça a solução <span aria-hidden="true">→</span></a></div>
+    </div>
+    <div class="hero-visual" aria-label="Exemplo ilustrativo de memória de relacionamento">
+        <div class="memory-preview">
+            <div class="preview-top"><span>MEMÓRIA DE RELACIONAMENTO</span><span class="preview-dot"></span></div>
+            <div class="preview-person"><span class="person-monogram">C</span><div><strong>Contexto do cliente</strong><small>Exemplo ilustrativo</small></div></div>
+            <div class="preview-section"><span class="mini-label">ÚLTIMA CONVERSA</span><p>O cliente quer entender como os investimentos acompanham seus planos.</p></div>
+            <div class="preview-section"><span class="mini-label">PONTOS DE ATENÇÃO</span><div class="preview-tags"><span>Objetivos de longo prazo</span><span>Perfil de investimento</span></div></div>
+            <div class="preview-next"><span class="mini-label">PRÓXIMO PASSO</span><p>Retomar os objetivos e esclarecer as dúvidas no próximo atendimento.</p><span aria-hidden="true">↗</span></div>
+        </div>
+        <p class="visual-caption">MAIS CONTEXTO.<br>MAIS PROXIMIDADE.</p>
+    </div>
+</section>
+<section class="xp-solution" id="solucao">
+    <div class="section-heading"><div><p class="eyebrow">DA VOZ À AÇÃO</p><h2>Inteligência aplicada<br>à rotina da assessoria.</h2></div><p>Reúna o que foi dito, acompanhe o que importa e mantenha a história de cada cliente presente em cada atendimento.</p></div>
+    <div class="feature-grid">
+        <article><span class="feature-number">01 /</span><h3>Registre a conversa</h3><p>Adicione áudio ou transcrição ao perfil do cliente para manter o contexto do atendimento.</p></article>
+        <article><span class="feature-number">02 /</span><h3>Encontre o que importa</h3><p>Consulte resumos e pontos relevantes na memória do relacionamento.</p></article>
+        <article><span class="feature-number">03 /</span><h3>Acompanhe os próximos passos</h3><p>Visualize as ações e o histórico para preparar a próxima conversa.</p></article>
+    </div>
+</section>
+<section class="xp-closing"><h2>Mais contexto.<br>Mais tempo.<br><span>Mais possibilidades.</span></h2><a class="btn btn-light" asp-page="/Clientes/Index">Conhecer meus clientes <span aria-hidden="true">→</span></a></section>
+<p class="demo-notice">Ambiente de demonstração: transcrição e análise usam serviços fictícios nesta versão.</p>

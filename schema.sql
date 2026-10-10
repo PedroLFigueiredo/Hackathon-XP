@@ -4,7 +4,8 @@ CREATE TABLE clientes (
     nome TEXT NOT NULL,
     telefone TEXT,
     email TEXT,
-    tom TEXT
+    perfil_financeiro TEXT, -- Ex: Conservador, Moderado, Arrojado
+    personalidade TEXT      -- Ex: Analítico, Comunicativo, Impetuoso, Reservado
 );
 
 -- Tabela: Conversas
@@ -12,7 +13,7 @@ CREATE TABLE conversas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cliente_id UUID NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
     data TIMESTAMP WITH TIME ZONE DEFAULT now(),
-    caminho_audio TEXT, -- NULL quando a conversa entra por texto (transcrição já pronta)
+    caminho_audio TEXT NOT NULL,
     tom TEXT,
     status TEXT NOT NULL, -- Ex: aguardando, transcrevendo, analisando, concluído, erro
     transcricao TEXT,

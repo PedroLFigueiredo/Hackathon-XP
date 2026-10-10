@@ -21,9 +21,15 @@ public class TestDbContext : AppDbContext
             v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
             v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null)!);
         b.Entity<Conversa>().Property(c => c.Resumo).HasConversion(conv);
-        b.Entity<Conversa>().Property(c => c.PautasSugeridas).HasConversion(conv);
-        b.Entity<Conversa>().Property(c => c.CriadoEm).HasDefaultValueSql(null);
-        b.Entity<Cliente>().Property(c => c.CriadoEm).HasDefaultValueSql(null);
+
+
+        var arrays = new ValueConverter<string[], string>(
+            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+            v => JsonSerializer.Deserialize<string[]>(v, (JsonSerializerOptions?)null)!);
+        b.Entity<InformacaoInsight>().Property(c => c.Tags).HasConversion(arrays);
+        b.Entity<InformacaoEvento>().Property(c => c.Tags).HasConversion(arrays);
+        b.Entity<InformacaoFinanceira>().Property(c => c.Tags).HasConversion(arrays);
+        b.Entity<AcaoToDo>().Property(c => c.Tags).HasConversion(arrays);
     }
 }
 
@@ -102,7 +108,7 @@ public static class Fabrica
         var c = new Conversa
         {
             Id = Guid.NewGuid(), ClienteId = clienteId, Data = new DateOnly(2026, 10, 10),
-            Origem = origem, Transcricao = transcricao, CaminhoDoAudio = audio, Status = StatusConversa.NaFila,
+            Origem = origem, Transcricao = transcricao, CaminhoDoAudio = audio ?? "", Status = StatusConversa.NaFila,
         };
         db.Conversas.Add(c);
         await db.SaveChangesAsync();

@@ -27,9 +27,13 @@ public class DetalheModel(ILogger<DetalheModel> logger, AppDbContext? db = null,
         {
             Cliente = await db.Clientes.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
             if (Cliente is null) return NotFound();
-            Conversas = await db.Conversas.AsNoTracking().Where(x => x.ClienteId == id).OrderByDescending(x => x.Data).ThenByDescending(x => x.CriadoEm).ToListAsync(ct);
+            Conversas = await db.Conversas.AsNoTracking().Where(x => x.ClienteId == id).OrderByDescending(x => x.DataRegistro).ToListAsync(ct);
             Insights = await db.Insights.AsNoTracking().Where(x => x.ClienteId == id).ToListAsync(ct);
-            Tarefas = await db.ToDos.AsNoTracking().Where(x => x.ClienteId == id).OrderBy(x => x.Concluida).ToListAsync(ct);
+            var eventos = await db.Eventos.AsNoTracking().Where(x => x.ClienteId == id).ToListAsync(ct);
+            Insights.AddRange(eventos.Select(x => new InformacaoInsight { Id = x.Id, ClienteId = id, Categoria = CategoriaInsight.Evento, Conteudo = x.Conteudo, TrechoDeOrigem = x.TrechoOrigem, DataReferencia = x.DataEvento }));
+            var financeiro = await db.Financeiro.AsNoTracking().Where(x => x.ClienteId == id).ToListAsync(ct);
+            Insights.AddRange(financeiro.Select(x => new InformacaoInsight { Id = x.Id, ClienteId = id, Categoria = CategoriaInsight.Objetivo, Conteudo = x.Conteudo, TrechoDeOrigem = x.TrechoOrigem }));
+            Tarefas = await db.ToDos.AsNoTracking().Where(x => x.ClienteId == id).OrderBy(x => x.StatusConclusao).ToListAsync(ct);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

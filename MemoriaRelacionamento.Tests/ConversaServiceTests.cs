@@ -57,7 +57,7 @@ public class ConversaServiceTests : IDisposable
         Assert.Equal(OrigemConversa.Texto, c.Origem);
         Assert.Equal(StatusConversa.NaFila, c.Status);
         Assert.Equal(texto, c.Transcricao);
-        Assert.Null(c.CaminhoDoAudio);
+        Assert.Equal("", c.CaminhoDoAudio); // caminho_audio é NOT NULL no schema enviado.
         Assert.Equal(id, await LerComTimeoutAsync(_fila));
     }
 

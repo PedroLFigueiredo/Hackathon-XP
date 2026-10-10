@@ -14,7 +14,7 @@ public class ConversaProcessor(AppDbContext db, ITranscriptionService transcript
         {
             conversa.MensagemDeErro = null;
             var cliente = await db.Clientes.SingleAsync(x => x.Id == conversa.ClienteId, ct);
-            if (string.IsNullOrWhiteSpace(conversa.Transcricao) && conversa.CaminhoDoAudio is not null)
+            if (string.IsNullOrWhiteSpace(conversa.Transcricao) && !string.IsNullOrEmpty(conversa.CaminhoDoAudio))
             {
                 conversa.Status = StatusConversa.Transcrevendo;
                 await db.SaveChangesAsync(ct);
@@ -24,13 +24,21 @@ public class ConversaProcessor(AppDbContext db, ITranscriptionService transcript
             conversa.Status = StatusConversa.Analisando;
             await db.SaveChangesAsync(ct);
             var facts = await db.Insights.Where(x => x.ClienteId == cliente.Id).Select(x => x.Conteudo).ToListAsync(ct);
+            facts.AddRange(await db.Eventos.Where(x => x.ClienteId == cliente.Id).Select(x => x.Conteudo).ToListAsync(ct));
+            facts.AddRange(await db.Financeiro.Where(x => x.ClienteId == cliente.Id).Select(x => x.Conteudo).ToListAsync(ct));
             var result = await analysis.AnalisarAsync(new(cliente.Nome, conversa.Data, conversa.Transcricao, facts), ct);
             // Resultado e status final são persistidos juntos, evitando saída parcial.
             conversa.Resumo = result.Resumo;
             conversa.Sentimento = result.Sentimento;
             conversa.PautasSugeridas = result.PautasSugeridas;
             foreach (var insight in result.Insights)
-                db.Insights.Add(new InformacaoInsight { ClienteId = cliente.Id, ConversaId = id, Categoria = insight.Categoria, Conteudo = insight.Conteudo, TrechoDeOrigem = insight.TrechoDeOrigem, DataReferencia = insight.DataReferencia, RecorrenteAnual = insight.RecorrenteAnual });
+            {
+                if (insight.Categoria == CategoriaInsight.Evento)
+                    db.Eventos.Add(new InformacaoEvento { ClienteId = cliente.Id, Conteudo = insight.Conteudo, TrechoOrigem = insight.TrechoDeOrigem, DataEvento = insight.DataReferencia });
+                else if (insight.Categoria == CategoriaInsight.Objetivo)
+                    db.Financeiro.Add(new InformacaoFinanceira { ClienteId = cliente.Id, Conteudo = insight.Conteudo, TrechoOrigem = insight.TrechoDeOrigem });
+                else db.Insights.Add(new InformacaoInsight { ClienteId = cliente.Id, ConversaId = id, Categoria = insight.Categoria, Conteudo = insight.Conteudo, TrechoDeOrigem = insight.TrechoDeOrigem, DataReferencia = insight.DataReferencia, RecorrenteAnual = insight.RecorrenteAnual });
+            }
             foreach (var action in result.Acoes)
                 db.ToDos.Add(new AcaoToDo { ClienteId = cliente.Id, ConversaId = id, Descricao = action.Descricao, DataOpcional = action.Data });
             conversa.Status = StatusConversa.Concluida;

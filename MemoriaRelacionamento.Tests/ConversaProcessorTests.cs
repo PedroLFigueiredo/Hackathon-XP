@@ -32,7 +32,7 @@ public class ConversaProcessorTests : IDisposable
         Assert.Equal(1, _analise.Chamadas);
         Assert.Equal(3, c.Resumo!.Count);
         Assert.Equal(Sentimento.Satisfeito, c.Sentimento);
-        Assert.Single(c.PautasSugeridas!);
+        Assert.Empty(c.PautasSugeridas); // O schema enviado não possui uma coluna para pautas.
     }
 
     [Fact]

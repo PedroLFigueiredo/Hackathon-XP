@@ -8,7 +8,7 @@
 @if (Model.Cliente is { } cliente)
 {
     <h1>@cliente.Nome</h1>
-    <p>CRM: @cliente.CrmId · @cliente.Email · @cliente.Telefone</p>
+    <p>@cliente.Email · @cliente.Telefone</p><p>Perfil financeiro: @cliente.PerfilFinanceiro · Personalidade: @cliente.Personalidade</p>
     <div class="alert alert-warning">Transcrição e análise fictícias nesta base. Os insights entram automaticamente.</div>
     <h2>Adicionar conversa</h2>
     <form method="post" asp-page-handler="Texto" class="mb-4">
