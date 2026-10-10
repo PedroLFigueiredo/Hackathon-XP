@@ -4,10 +4,7 @@ namespace MemoriaRelacionamento.Services;
 
 public class ConversaQueue
 {
-    private readonly Channel<Guid> _canal = Channel.CreateUnbounded<Guid>(
-        new UnboundedChannelOptions { SingleReader = true });
-
-    public void Enfileirar(Guid conversaId) => _canal.Writer.TryWrite(conversaId);
-
-    public ValueTask<Guid> LerAsync(CancellationToken ct) => _canal.Reader.ReadAsync(ct);
+    private readonly Channel<Guid> queue = Channel.CreateUnbounded<Guid>(new UnboundedChannelOptions { SingleReader = true });
+    public void Enfileirar(Guid id) => queue.Writer.TryWrite(id);
+    public IAsyncEnumerable<Guid> LerAsync(CancellationToken ct) => queue.Reader.ReadAllAsync(ct);
 }

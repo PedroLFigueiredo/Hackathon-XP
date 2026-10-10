@@ -1,0 +1,18 @@
+@page
+@model DemoModel
+@{ ViewData["Title"] = "Preparar demonstração"; }
+<h1>Preparar demonstração</h1>
+<p>Clientes fictícios para a apresentação. A carga atualiza os cadastros e preserva conversas, insights e tarefas.</p>
+<div asp-validation-summary="All" class="text-danger"></div>
+@if (!Model.BancoConfigurado) { <partial name="_DatabaseNotice" /> }
+@if (Model.Resultado is not null) { <div class="alert alert-success">@Model.Resultado</div> }
+<table class="table">
+    <thead><tr><th>ID no CRM</th><th>Nome</th><th>E-mail</th><th>Telefone</th></tr></thead>
+    <tbody>@foreach (var cliente in Model.Clientes) { <tr>@foreach (var campo in cliente) { <td>@campo</td> }</tr> }</tbody>
+</table>
+<p><a href="~/exemplos/clientes.csv" download>Baixar modelo CSV</a></p>
+@if (Model.BancoConfigurado)
+{
+    <form method="post"><button class="btn btn-primary">Carregar clientes no Supabase</button></form>
+}
+<p class="mt-3"><a asp-page="/Clientes/Index">Abrir clientes</a></p>

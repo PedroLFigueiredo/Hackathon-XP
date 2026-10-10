@@ -11,7 +11,7 @@ public class ConversaServiceTests : IDisposable
 {
     private readonly BancoDeTeste _banco = new();
     private readonly ConversaQueue _fila = new();
-    private readonly string _uploads = Path.Combine(Path.GetTempPath(), "uploads-" + Guid.NewGuid().ToString("N"));
+    private readonly string _uploads = Path.Combine(Path.GetTempPath(), "test-" + Guid.NewGuid().ToString("N"), "uploads");
 
     public void Dispose()
     {
@@ -23,13 +23,15 @@ public class ConversaServiceTests : IDisposable
     {
         var cfg = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Uploads:Path"] = _uploads }).Build();
-        return new ConversaService(db, _fila, cfg, new AmbienteFake());
+        return new ConversaService(db, _fila, new AmbienteFake { ContentRootPath = Path.GetDirectoryName(_uploads)! });
     }
 
     private static async Task<Guid> LerComTimeoutAsync(ConversaQueue fila)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        return await fila.LerAsync(cts.Token);
+        await using var reader = fila.LerAsync(cts.Token).GetAsyncEnumerator();
+        await reader.MoveNextAsync();
+        return reader.Current;
     }
 
     [Fact]
@@ -45,7 +47,7 @@ public class ConversaServiceTests : IDisposable
     public async Task Texto_cria_conversa_NaFila_e_enfileira()
     {
         var cli = await _banco.CriarClienteAsync();
-        var texto = new string('a', ConversaService.TamanhoMinimoTexto);
+        var texto = new string('a', 50);
         await using var db = _banco.Novo();
 
         var id = await Servico(db).CriarDeTextoAsync(cli.Id, new DateOnly(2026, 10, 10), "  " + texto + "  ", default);
@@ -94,8 +96,10 @@ public class ConversaServiceTests : IDisposable
         Assert.Equal(id, await LerComTimeoutAsync(_fila));
     }
 
-    private sealed class AmbienteFake : IHostEnvironment
+    private sealed class AmbienteFake : Microsoft.AspNetCore.Hosting.IWebHostEnvironment
     {
+        public string WebRootPath { get; set; } = Path.GetTempPath();
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
         public string EnvironmentName { get; set; } = "Test";
         public string ApplicationName { get; set; } = "Test";
         public string ContentRootPath { get; set; } = Path.GetTempPath();
@@ -114,8 +118,11 @@ public class ConversaQueueTests
         fila.Enfileirar(a);
         fila.Enfileirar(b);
 
-        Assert.Equal(a, await fila.LerAsync(default));
-        Assert.Equal(b, await fila.LerAsync(default));
+        await using var reader = fila.LerAsync(default).GetAsyncEnumerator();
+        Assert.True(await reader.MoveNextAsync());
+        Assert.Equal(a, reader.Current);
+        Assert.True(await reader.MoveNextAsync());
+        Assert.Equal(b, reader.Current);
     }
 
     [Fact]
@@ -123,6 +130,6 @@ public class ConversaQueueTests
     {
         var fila = new ConversaQueue();
         using var cts = new CancellationTokenSource(50);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await fila.LerAsync(cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => { await using var reader = fila.LerAsync(cts.Token).GetAsyncEnumerator(); await reader.MoveNextAsync(); });
     }
 }

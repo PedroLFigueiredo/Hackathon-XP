@@ -1,37 +1,23 @@
 using MemoriaRelacionamento.Data;
 using MemoriaRelacionamento.Models;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 
 namespace MemoriaRelacionamento.Pages.Clientes;
 
-public class IndexModel : PageModel
+public class IndexModel(ILogger<IndexModel> logger, AppDbContext? db = null) : PageModel
 {
-    private readonly AppDbContext _db;
-    public IndexModel(AppDbContext db) => _db = db;
-
-    public List<Cliente> Clientes { get; private set; } = new();
-
-    [BindProperty] public string? Nome { get; set; }
-    [BindProperty] public string? Telefone { get; set; }
-    [BindProperty] public string? Email { get; set; }
-
-    public async Task OnGetAsync() => await CarregarAsync();
-
-    public async Task<IActionResult> OnPostAsync()
+    public bool BancoConfigurado => db is not null;
+    public List<Cliente> Clientes { get; private set; } = [];
+    public string? Erro { get; private set; }
+    public async Task OnGetAsync(CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(Nome))
+        if (db is null) return;
+        try { Clientes = await db.Clientes.AsNoTracking().OrderBy(x => x.Nome).ToListAsync(ct); }
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            ModelState.AddModelError(nameof(Nome), "O nome é obrigatório.");
-            await CarregarAsync();
-            return Page();
+            logger.LogError(exception, "Falha ao listar clientes");
+            Erro = "Não foi possível acessar os clientes. Verifique a conexão e o schema do Supabase.";
         }
-        _db.Clientes.Add(new Cliente { Id = Guid.NewGuid(), Nome = Nome.Trim(), Telefone = Telefone, Email = Email });
-        await _db.SaveChangesAsync();
-        return RedirectToPage();
     }
-
-    private async Task CarregarAsync() =>
-        Clientes = await _db.Clientes.AsNoTracking().OrderBy(c => c.Nome).ToListAsync();
 }

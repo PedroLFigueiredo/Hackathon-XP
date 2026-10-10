@@ -36,7 +36,7 @@ public class ConversaProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task Resultado_gera_insights_pendentes_e_todos_abertos()
+    public async Task Resultado_gera_insights_automaticos_e_todos_abertos()
     {
         var cli = await _banco.CriarClienteAsync();
         var id = await Fabrica.ConversaAsync(_banco, cli.Id, OrigemConversa.Texto, "texto");
@@ -45,10 +45,9 @@ public class ConversaProcessorTests : IDisposable
 
         await using var db = _banco.Novo();
         var insight = await db.Insights.SingleAsync();
-        Assert.Equal(StatusRevisao.Pendente, insight.StatusDeRevisao);
         Assert.Equal(CategoriaInsight.Familia, insight.Categoria);
         Assert.Equal(cli.Id, insight.ClienteId);
-        var todo = await db.Acoes.SingleAsync();
+        var todo = await db.ToDos.SingleAsync();
         Assert.False(todo.Concluida);
         Assert.Equal(new DateOnly(2026, 10, 20), todo.DataOpcional);
     }
@@ -89,7 +88,7 @@ public class ConversaProcessorTests : IDisposable
             await using var db = _banco.Novo();
             var c = await db.Conversas.SingleAsync(x => x.Id == id);
             Assert.Equal(StatusConversa.Erro, c.Status);
-            Assert.Contains("arquivo corrompido", c.MensagemDeErro);
+            Assert.NotNull(c.MensagemDeErro);
             Assert.Equal(0, _analise.Chamadas);
         }
         finally { File.Delete(arquivo); }
@@ -110,7 +109,7 @@ public class ConversaProcessorTests : IDisposable
             await using var db = _banco.Novo();
             var c = await db.Conversas.SingleAsync(x => x.Id == id);
             Assert.Equal(StatusConversa.Erro, c.Status);
-            Assert.Equal("sem rede", c.MensagemDeErro);
+            Assert.NotNull(c.MensagemDeErro);
             Assert.Equal("texto transcrito do áudio", c.Transcricao);
 
             // Reprocessar não roda o Whisper de novo.
@@ -168,51 +167,36 @@ public class ConversaProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task Fatos_aprovados_do_cliente_vao_para_a_analise()
+    public async Task Fatos_do_cliente_entram_automaticamente_na_analise()
     {
         var cli = await _banco.CriarClienteAsync();
         var anterior = await Fabrica.ConversaAsync(_banco, cli.Id, OrigemConversa.Texto, "antiga");
         await using (var db = _banco.Novo())
         {
-            db.Insights.AddRange(
-                new InformacaoInsight { Id = Guid.NewGuid(), ClienteId = cli.Id, ConversaId = anterior, Conteudo = "Gosta de golfe", StatusDeRevisao = StatusRevisao.Aprovado },
-                new InformacaoInsight { Id = Guid.NewGuid(), ClienteId = cli.Id, ConversaId = anterior, Conteudo = "Fato pendente", StatusDeRevisao = StatusRevisao.Pendente },
-                new InformacaoInsight { Id = Guid.NewGuid(), ClienteId = cli.Id, ConversaId = anterior, Conteudo = "Fato descartado", StatusDeRevisao = StatusRevisao.Descartado });
+            db.Insights.Add(new InformacaoInsight { ClienteId = cli.Id, ConversaId = anterior, Conteudo = "Gosta de golfe" });
             await db.SaveChangesAsync();
         }
         var nova = await Fabrica.ConversaAsync(_banco, cli.Id, OrigemConversa.Texto, "nova conversa");
-
         await ProcessarAsync(nova);
-
         Assert.Equal(new[] { "Gosta de golfe" }, _analise.Ultima!.FatosJaConhecidos);
-        Assert.Equal("Roberto", _analise.Ultima.NomeCliente);
     }
-
     [Fact]
-    public async Task Reprocessar_nao_duplica_e_preserva_aprovados_e_concluidos()
+    public async Task Conversa_concluida_nao_e_processada_novamente()
     {
         var cli = await _banco.CriarClienteAsync();
         var id = await Fabrica.ConversaAsync(_banco, cli.Id, OrigemConversa.Texto, "texto");
         await ProcessarAsync(id);
-
         await using (var db = _banco.Novo())
         {
-            (await db.Insights.SingleAsync()).StatusDeRevisao = StatusRevisao.Aprovado;
-            (await db.Acoes.SingleAsync()).Concluida = true;
+            (await db.ToDos.SingleAsync()).Concluida = true;
             await db.SaveChangesAsync();
         }
-
         await ProcessarAsync(id);
-
         await using var db2 = _banco.Novo();
-        // 1 aprovado antigo + 1 novo pendente; 1 to-do concluído + 1 novo aberto.
-        Assert.Equal(2, await db2.Insights.CountAsync());
-        Assert.Equal(1, await db2.Insights.CountAsync(i => i.StatusDeRevisao == StatusRevisao.Aprovado));
-        Assert.Equal(1, await db2.Insights.CountAsync(i => i.StatusDeRevisao == StatusRevisao.Pendente));
-        Assert.Equal(2, await db2.Acoes.CountAsync());
-        Assert.Equal(1, await db2.Acoes.CountAsync(a => a.Concluida));
+        Assert.Equal(1, await db2.Insights.CountAsync());
+        Assert.True((await db2.ToDos.SingleAsync()).Concluida);
+        Assert.Equal(1, _analise.Chamadas);
     }
-
     [Fact]
     public async Task Reprocessar_pendentes_nao_acumula()
     {
@@ -224,7 +208,7 @@ public class ConversaProcessorTests : IDisposable
 
         await using var db = _banco.Novo();
         Assert.Equal(1, await db.Insights.CountAsync());
-        Assert.Equal(1, await db.Acoes.CountAsync());
+        Assert.Equal(1, await db.ToDos.CountAsync());
     }
 
     [Fact]

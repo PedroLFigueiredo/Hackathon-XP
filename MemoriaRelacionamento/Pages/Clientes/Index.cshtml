@@ -1,21 +1,20 @@
 @page
 @model MemoriaRelacionamento.Pages.Clientes.IndexModel
 @{ ViewData["Title"] = "Clientes"; }
-
 <h1>Clientes</h1>
-
-<ul>
-    @foreach (var c in Model.Clientes)
-    {
-        <li><a asp-page="Detalhe" asp-route-id="@c.Id">@c.Nome</a></li>
-    }
-</ul>
-
-<h2>Novo cliente</h2>
-<form method="post">
-    <div asp-validation-summary="All" class="text-danger"></div>
-    <p><label>Nome <input asp-for="Nome" required /></label></p>
-    <p><label>Telefone <input asp-for="Telefone" /></label></p>
-    <p><label>E-mail <input asp-for="Email" /></label></p>
-    <button type="submit">Criar</button>
-</form>
+@if (!Model.BancoConfigurado) { <partial name="_DatabaseNotice" /> }
+else if (Model.Erro is not null) { <div class="alert alert-danger">@Model.Erro</div> }
+else if (Model.Clientes.Count == 0) { <p>Nenhum cliente cadastrado. Importe os dados do CRM quando a sincronização estiver integrada.</p> }
+else
+{
+    <table class="table">
+        <thead><tr><th>Nome</th><th>ID no CRM</th><th>E-mail</th><th>Telefone</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var cliente in Model.Clientes)
+        {
+            <tr><td>@cliente.Nome</td><td>@cliente.CrmId</td><td>@cliente.Email</td><td>@cliente.Telefone</td>
+            <td><a asp-page="Detalhe" asp-route-id="@cliente.Id">Abrir perfil</a></td></tr>
+        }
+        </tbody>
+    </table>
+}

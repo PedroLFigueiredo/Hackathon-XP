@@ -7,77 +7,62 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MemoriaRelacionamento.Pages.Clientes;
 
-[RequestSizeLimit(200_000_000)]
-[RequestFormLimits(MultipartBodyLengthLimit = 200_000_000)]
-public class DetalheModel : PageModel
+[RequestSizeLimit(ConversaService.MaxAudioBytes)]
+[RequestFormLimits(MultipartBodyLengthLimit = ConversaService.MaxAudioBytes)]
+public class DetalheModel(ILogger<DetalheModel> logger, AppDbContext? db = null, ConversaService? service = null) : PageModel
 {
-    private readonly AppDbContext _db;
-    private readonly ConversaService _conversas;
-
-    public DetalheModel(AppDbContext db, ConversaService conversas)
-    {
-        _db = db;
-        _conversas = conversas;
-    }
-
-    public Cliente Cliente { get; private set; } = null!;
-    public List<Conversa> Conversas { get; private set; } = new();
-
+    public bool BancoConfigurado => db is not null;
+    public Cliente? Cliente { get; private set; }
+    public List<Conversa> Conversas { get; private set; } = [];
+    public List<InformacaoInsight> Insights { get; private set; } = [];
+    public List<AcaoToDo> Tarefas { get; private set; } = [];
     [BindProperty] public DateOnly Data { get; set; } = DateOnly.FromDateTime(DateTime.Today);
     [BindProperty] public string? Texto { get; set; }
     [BindProperty] public IFormFile? Audio { get; set; }
 
-    public async Task<IActionResult> OnGetAsync(Guid id)
+    public async Task<IActionResult> OnGetAsync(Guid id, CancellationToken ct)
     {
-        if (!await CarregarAsync(id)) return NotFound();
+        if (db is null) return Page();
+        try
+        {
+            Cliente = await db.Clientes.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (Cliente is null) return NotFound();
+            Conversas = await db.Conversas.AsNoTracking().Where(x => x.ClienteId == id).OrderByDescending(x => x.Data).ThenByDescending(x => x.CriadoEm).ToListAsync(ct);
+            Insights = await db.Insights.AsNoTracking().Where(x => x.ClienteId == id).ToListAsync(ct);
+            Tarefas = await db.ToDos.AsNoTracking().Where(x => x.ClienteId == id).OrderBy(x => x.Concluida).ToListAsync(ct);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(exception, "Falha ao abrir perfil {ClienteId}", id);
+            ModelState.AddModelError("", "Não foi possível abrir o perfil. Verifique a conexão e o schema do Supabase.");
+        }
         return Page();
     }
 
-    public async Task<IActionResult> OnPostTextoAsync(Guid id, CancellationToken ct)
+    public async Task<IActionResult> OnPostTextoAsync(Guid id, CancellationToken ct) => await EnviarAsync(id, false, ct);
+    public async Task<IActionResult> OnPostAudioAsync(Guid id, CancellationToken ct) => await EnviarAsync(id, true, ct);
+
+    private async Task<IActionResult> EnviarAsync(Guid id, bool audio, CancellationToken ct)
     {
-        if (!await CarregarAsync(id)) return NotFound();
+        if (service is null) return StatusCode(503);
+        if (!ModelState.IsValid) return await OnGetAsync(id, ct);
         try
         {
-            await _conversas.CriarDeTextoAsync(id, Data, Texto ?? "", ct);
+            if (audio)
+            {
+                if (Audio is null || Audio.Length == 0) throw new ArgumentException("Selecione um áudio.");
+                await using var stream = Audio.OpenReadStream();
+                await service.CriarDeAudioAsync(id, Data, stream, Audio.FileName, ct);
+            }
+            else await service.CriarDeTextoAsync(id, Data, Texto ?? "", ct);
             return RedirectToPage(new { id });
         }
-        catch (ArgumentException ex)
+        catch (ArgumentException exception) { ModelState.AddModelError("", exception.Message); }
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            ModelState.AddModelError(nameof(Texto), ex.Message);
-            return Page();
+            logger.LogError(exception, "Falha ao enviar conversa");
+            ModelState.AddModelError("", "Não foi possível salvar a conversa. Verifique a conexão com o Supabase.");
         }
-    }
-
-    public async Task<IActionResult> OnPostAudioAsync(Guid id, CancellationToken ct)
-    {
-        if (!await CarregarAsync(id)) return NotFound();
-        if (Audio is null || Audio.Length == 0)
-        {
-            ModelState.AddModelError(nameof(Audio), "Selecione um arquivo.");
-            return Page();
-        }
-        try
-        {
-            await using var stream = Audio.OpenReadStream();
-            await _conversas.CriarDeAudioAsync(id, Data, stream, Audio.FileName, ct);
-            return RedirectToPage(new { id });
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(nameof(Audio), ex.Message);
-            return Page();
-        }
-    }
-
-    private async Task<bool> CarregarAsync(Guid id)
-    {
-        var cliente = await _db.Clientes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
-        if (cliente is null) return false;
-        Cliente = cliente;
-        Conversas = await _db.Conversas.AsNoTracking()
-            .Where(c => c.ClienteId == id)
-            .OrderByDescending(c => c.CriadoEm)
-            .ToListAsync();
-        return true;
+        return await OnGetAsync(id, ct);
     }
 }

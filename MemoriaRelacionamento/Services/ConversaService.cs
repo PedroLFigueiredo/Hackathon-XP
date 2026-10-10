@@ -1,78 +1,55 @@
 using MemoriaRelacionamento.Data;
 using MemoriaRelacionamento.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace MemoriaRelacionamento.Services;
 
-public class ConversaService
+public class ConversaService(AppDbContext db, ConversaQueue queue, IWebHostEnvironment environment)
 {
-    public const int TamanhoMinimoTexto = 50;
-    public static readonly string[] ExtensoesAceitas = { ".wav", ".mp3", ".m4a" };
-
-    private readonly AppDbContext _db;
-    private readonly ConversaQueue _fila;
-    private readonly string _pastaUploads;
-
-    public ConversaService(AppDbContext db, ConversaQueue fila, IConfiguration config, IHostEnvironment env)
-    {
-        _db = db;
-        _fila = fila;
-        var pasta = config["Uploads:Path"] ?? "uploads";
-        _pastaUploads = Path.IsPathRooted(pasta) ? pasta : Path.Combine(env.ContentRootPath, pasta);
-    }
+    public const long MaxAudioBytes = 200_000_000;
 
     public async Task<Guid> CriarDeTextoAsync(Guid clienteId, DateOnly data, string texto, CancellationToken ct)
     {
-        texto = (texto ?? "").Trim();
-        if (texto.Length < TamanhoMinimoTexto)
-            throw new ArgumentException($"O texto precisa ter pelo menos {TamanhoMinimoTexto} caracteres.");
-
-        var conversa = new Conversa
-        {
-            Id = Guid.NewGuid(),
-            ClienteId = clienteId,
-            Data = data,
-            Origem = OrigemConversa.Texto,
-            Transcricao = texto,
-            Status = StatusConversa.NaFila,
-        };
-        _db.Conversas.Add(conversa);
-        await _db.SaveChangesAsync(ct);
-        _fila.Enfileirar(conversa.Id);
-        return conversa.Id;
+        if (string.IsNullOrWhiteSpace(texto) || texto.Trim().Length < 50)
+            throw new ArgumentException("Informe uma transcrição com pelo menos 50 caracteres.");
+        return await SalvarAsync(new Conversa { ClienteId = clienteId, Data = data, Origem = OrigemConversa.Texto, Transcricao = texto.Trim() }, ct);
     }
 
     public async Task<Guid> CriarDeAudioAsync(Guid clienteId, DateOnly data, Stream arquivo, string nomeArquivo, CancellationToken ct)
     {
-        var ext = Path.GetExtension(nomeArquivo ?? "").ToLowerInvariant();
-        if (!ExtensoesAceitas.Contains(ext))
-            throw new ArgumentException($"Formato não suportado. Envie {string.Join(", ", ExtensoesAceitas)}.");
-
-        var id = Guid.NewGuid();
-        Directory.CreateDirectory(_pastaUploads);
-        var caminho = Path.Combine(_pastaUploads, id + ext);
-        await using (var destino = File.Create(caminho))
-            await arquivo.CopyToAsync(destino, ct);
-
+        var extension = Path.GetExtension(nomeArquivo).ToLowerInvariant();
+        if (extension is not (".wav" or ".mp3" or ".m4a")) throw new ArgumentException("Envie um arquivo WAV, MP3 ou M4A.");
+        var conversa = new Conversa { ClienteId = clienteId, Data = data, Origem = OrigemConversa.Audio };
+        var directory = Path.Combine(environment.ContentRootPath, "uploads");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, $"{conversa.Id}{extension}");
         try
         {
-            _db.Conversas.Add(new Conversa
+            await using (var destination = File.Create(path))
             {
-                Id = id,
-                ClienteId = clienteId,
-                Data = data,
-                Origem = OrigemConversa.Audio,
-                CaminhoDoAudio = caminho,
-                Status = StatusConversa.NaFila,
-            });
-            await _db.SaveChangesAsync(ct);
+                var buffer = new byte[81920];
+                long total = 0;
+                int count;
+                while ((count = await arquivo.ReadAsync(buffer, ct)) > 0)
+                {
+                    total += count;
+                    if (total > MaxAudioBytes) throw new ArgumentException("O áudio deve ter no máximo 200 MB.");
+                    await destination.WriteAsync(buffer.AsMemory(0, count), ct);
+                }
+                if (total == 0) throw new ArgumentException("O arquivo de áudio está vazio.");
+            }
+            conversa.CaminhoDoAudio = path;
+            return await SalvarAsync(conversa, ct);
         }
-        catch
-        {
-            File.Delete(caminho);
-            throw;
-        }
+        catch { File.Delete(path); throw; }
+    }
 
-        _fila.Enfileirar(id);
-        return id;
+    private async Task<Guid> SalvarAsync(Conversa conversa, CancellationToken ct)
+    {
+        if (!await db.Clientes.AnyAsync(x => x.Id == conversa.ClienteId, ct)) throw new ArgumentException("Cliente não encontrado.");
+        db.Conversas.Add(conversa);
+        await db.SaveChangesAsync(ct);
+        queue.Enfileirar(conversa.Id);
+        return conversa.Id;
     }
 }

@@ -481,17 +481,9 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-whisper-models/
-uploads/
-# Segredos
+# Dados locais do MVP
+**/models/*.bin
+**/uploads/
 .env
-
-# Modelos do Whisper e áudios enviados
-models/
-uploads/
-
-# .NET
-bin/
-obj/
-.vs/
-*.user
+.env.*
+appsettings.Local.json

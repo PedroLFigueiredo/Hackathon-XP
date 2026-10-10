@@ -16,12 +16,16 @@ public class WhisperTranscriptionService : ITranscriptionService
 
     public async Task<string> TranscreverAsync(string caminhoAudio, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        if (!File.Exists(caminhoAudio))
+            throw new FileNotFoundException("Áudio não encontrado.", caminhoAudio);
         var temporario = Path.Combine(Path.GetTempPath(), $"whisper-{Guid.NewGuid():N}.wav");
         try
         {
             var inicio = DateTime.UtcNow;
             // Decodificação síncrona e pesada: sai da thread do worker.
             await Task.Run(() => AudioNormalizer.ParaWav16kMono(caminhoAudio, temporario), ct);
+            ct.ThrowIfCancellationRequested();
 
             // O processor é criado por transcrição; a factory (modelo carregado) é compartilhada.
             await using var processor = _factory.CreateBuilder().WithLanguage("pt").Build();

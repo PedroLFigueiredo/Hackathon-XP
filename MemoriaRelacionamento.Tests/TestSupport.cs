@@ -17,9 +17,9 @@ public class TestDbContext : AppDbContext
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
-        var conv = new ValueConverter<List<string>?, string?>(
-            v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-            v => v == null ? null : JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null));
+        var conv = new ValueConverter<List<string>, string>(
+            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+            v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null)!);
         b.Entity<Conversa>().Property(c => c.Resumo).HasConversion(conv);
         b.Entity<Conversa>().Property(c => c.PautasSugeridas).HasConversion(conv);
         b.Entity<Conversa>().Property(c => c.CriadoEm).HasDefaultValueSql(null);
@@ -44,7 +44,7 @@ public sealed class BancoDeTeste : IDisposable
     public async Task<Cliente> CriarClienteAsync(string nome = "Roberto")
     {
         await using var db = Novo();
-        var c = new Cliente { Id = Guid.NewGuid(), Nome = nome };
+        var c = new Cliente { Id = Guid.NewGuid(), Nome = nome, CrmId = Guid.NewGuid().ToString() };
         db.Clientes.Add(c);
         await db.SaveChangesAsync();
         return c;
@@ -61,6 +61,8 @@ public class TranscricaoStub : ITranscriptionService
 
     public Task<string> TranscreverAsync(string caminhoAudio, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        if (!File.Exists(caminhoAudio)) throw new FileNotFoundException();
         Chamadas++;
         if (Falha != null) throw Falha;
         return Task.FromResult(Texto);
