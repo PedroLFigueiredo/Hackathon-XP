@@ -12,15 +12,18 @@ O problema priorizado pelo MVP é, portanto, **a dificuldade de transformar as i
 
 ## 2. O Objetivo do MVP
 
-Construir um sistema demonstrável, desenvolvido durante o período de aproximadamente oito horas do hackathon, que auxilie o assessor a organizar informações relevantes das conversas com seus clientes e a recuperar esse contexto durante a preparação de novos atendimentos.
+Construir um sistema funcional que utilize Inteligência Artificial para transformar gravações de reuniões com investidores em informações estruturadas, consultáveis e úteis para a continuidade do relacionamento entre o assessor e o cliente.
+
+A solução combinará a transcrição automática de áudio, realizada localmente por meio do Whisper, com a análise semântica do texto utilizando GPT. A partir dessa análise, o sistema deverá identificar informações relevantes mencionadas durante a conversa e organizá-las em registros que auxiliem o assessor na preparação de atendimentos futuros.
 
 A solução deverá permitir ao assessor:
 
 1. **Importar o áudio de uma reunião:** disponibilizar a gravação para processamento pelo sistema.
-2. **Transcrever o áudio automaticamente:** converter a conversa em texto para viabilizar sua análise.
-3. **Extrair informações relevantes com Inteligência Artificial:** identificar e organizar informações mencionadas na conversa, como objetivos pessoais, preferências, eventos importantes e ações pendentes.
-4. **Consultar informações estruturadas no perfil do cliente:** disponibilizar os registros extraídos em um formato organizado, facilitando a recuperação do histórico antes de um novo contato.
-5. **Apoiar a preparação do próximo atendimento:** permitir que o assessor utilize o histórico registrado para retomar assuntos anteriores e conduzir conversas com maior continuidade e contexto.
+2. **Transcrever o áudio automaticamente:** converter a conversa em texto por meio de processamento local para viabilizar sua análise.
+3. **Extrair informações relevantes com Inteligência Artificial:** para identificar informações relevantes, preservando o contexto em que foram mencionadas.
+4. **Gerar insights estruturados:** organizar objetivos declarados, preferências, eventos importantes, assuntos discutidos e ações pendentes que possam ser relevantes para o relacionamento.
+5. **Revisar as informações extraídas:** permitir que o assessor avalie a exatidão e a pertinência dos resultados antes de incorporá-los ao histórico.
+6. **Consultar o histórico do cliente:** armazenar e recuperar os registros aprovados, facilitando a preparação de novos atendimentos.
 
 As informações extraídas pela Inteligência Artificial devem ser consideradas sugestões sujeitas a revisão, e não fatos automaticamente confirmados. O assessor permanece responsável por avaliar a pertinência e a exatidão dos registros utilizados no relacionamento com o cliente.
 
