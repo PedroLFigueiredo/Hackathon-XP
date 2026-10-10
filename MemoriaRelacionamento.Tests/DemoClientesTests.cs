@@ -16,11 +16,13 @@ public class DemoClientesTests
             ["perfil_pessoal"] = ["id", "cliente_id", "conversa_id", "conteudo", "trecho_origem", "tags", "status_revisao"],
             ["informacao_eventos"] = ["id", "cliente_id", "conteudo", "data_evento", "trecho_origem", "tags", "status_revisao"],
             ["informacao_financeiro"] = ["id", "cliente_id", "conteudo", "trecho_origem", "tags", "status_revisao"],
-            ["acoes"] = ["id", "cliente_id", "conversa_id", "descricao", "data_opcional", "tags", "status_conclusao"]
+            ["acoes"] = ["id", "cliente_id", "conversa_id", "descricao", "data_opcional", "tags", "status_conclusao"],
+            // Acrescentada depois do schema enviado, em db/insights_assessor.sql.
+            ["insights_assessor"] = ["id", "cliente_id", "conversa_id", "tipo", "conteudo", "sugestao", "trecho_origem"]
         };
         foreach (var entity in db.Model.GetEntityTypes())
             Assert.Equal(expected[entity.GetTableName()!].OrderBy(x => x), entity.GetProperties().Select(x => x.GetColumnName()).OrderBy(x => x));
-        Assert.Equal(6, db.Model.GetEntityTypes().Count());
+        Assert.Equal(7, db.Model.GetEntityTypes().Count());
     }
 
     [Fact]
@@ -32,12 +34,20 @@ public class DemoClientesTests
         await service.CarregarAsync(CancellationToken.None);
         var clientes = await db.Clientes.AsNoTracking().ToListAsync();
         Assert.Equal(6, clientes.Count);
-        Assert.All(clientes, c => { Assert.False(string.IsNullOrWhiteSpace(c.PerfilFinanceiro)); Assert.False(string.IsNullOrWhiteSpace(c.Personalidade)); });
+        // A carga traz só o cadastro: perfil financeiro e personalidade vêm da análise das conversas.
+        Assert.All(clientes, c => { Assert.Null(c.PerfilFinanceiro); Assert.Null(c.Personalidade); });
         var conversa = new Conversa { ClienteId = clientes[0].Id, Data = new DateOnly(2026, 10, 10), Transcricao = "Histórico preservado" };
         db.Conversas.Add(conversa);
+        var analisado = await db.Clientes.SingleAsync(x => x.Id == clientes[0].Id);
+        analisado.Personalidade = "Analítico";
+        analisado.PerfilFinanceiro = "Moderado";
         await db.SaveChangesAsync();
         await service.CarregarAsync(CancellationToken.None);
         Assert.Equal(6, await db.Clientes.CountAsync());
+        // Repetir a carga não apaga o que a análise gravou no cliente.
+        var preservado = await db.Clientes.AsNoTracking().SingleAsync(x => x.Id == clientes[0].Id);
+        Assert.Equal("Analítico", preservado.Personalidade);
+        Assert.Equal("Moderado", preservado.PerfilFinanceiro);
         Assert.Equal("Histórico preservado", (await db.Conversas.SingleAsync()).Transcricao);
     }
     [Fact]
@@ -50,8 +60,8 @@ public class DemoClientesTests
         db.Financeiro.Add(new() { ClienteId = cliente.Id, Conteudo = "Reserva de emergência" });
         await db.SaveChangesAsync();
         var id = await Fabrica.ConversaAsync(banco, cliente.Id, OrigemConversa.Texto, "Transcrição para análise");
-        var analise = new AnaliseStub { Resultado = new(["Resumo"], Sentimento.Neutro,
-            [new(CategoriaInsight.Evento, "Aniversário", "trecho", new DateOnly(2026, 11, 1), false), new(CategoriaInsight.Objetivo, "Comprar casa", "trecho", null, false)], [], []) };
+        var analise = new AnaliseStub { Resultado = new(["Resumo"], Sentimento.Neutro, null, null, [],
+            [new("Aniversário", new DateOnly(2026, 11, 1), "trecho", ["anual"])], [new("Comprar casa", "trecho", ["objetivo"])], [], []) };
         await Fabrica.Processor(db, new TranscricaoStub(), analise).ProcessarAsync(id, CancellationToken.None);
         Assert.Contains("Viagem em novembro", analise.Ultima!.FatosJaConhecidos);
         Assert.Contains("Reserva de emergência", analise.Ultima.FatosJaConhecidos);

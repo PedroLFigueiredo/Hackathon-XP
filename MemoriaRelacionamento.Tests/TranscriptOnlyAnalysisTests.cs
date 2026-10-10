@@ -11,7 +11,11 @@ public class TranscriptOnlyAnalysisTests
             new("Ana", new DateOnly(2026, 10, 10), "Eu gostaria de falar sobre minha conta.", []), default);
 
         Assert.Empty(result.Resumo);
-        Assert.Empty(result.Insights);
+        Assert.Empty(result.PerfilPessoal);
+        Assert.Empty(result.Eventos);
+        Assert.Empty(result.Financeiro);
+        Assert.Null(result.Personalidade);
+        Assert.Null(result.PerfilFinanceiro);
         Assert.Empty(result.Acoes);
         Assert.Empty(result.PautasSugeridas);
         Assert.Null(result.Sentimento);

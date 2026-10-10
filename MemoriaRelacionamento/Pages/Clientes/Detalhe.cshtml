@@ -1,77 +1,315 @@
 @page "{id:guid}"
 @model MemoriaRelacionamento.Pages.Clientes.DetalheModel
+@using System.Globalization
 @using MemoriaRelacionamento.Models
+@using MemoriaRelacionamento.Services
 @inject IConfiguration Configuration
-@{ ViewData["Title"] = Model.Cliente?.Nome ?? "Perfil do cliente"; }
-<a asp-page="Index">← Clientes</a>
-<div asp-validation-summary="All" class="text-danger"></div>
+@{
+    ViewData["Title"] = Model.Cliente?.Nome ?? "Perfil do cliente";
+    var hoje = DateOnly.FromDateTime(DateTime.Today);
+    var ptBr = CultureInfo.GetCultureInfo("pt-BR");
+
+    void Etiquetas(IEnumerable<string> tags)
+    {
+        if (!tags.Any()) return;
+        <div class="detalhe-campo">
+            <span class="rotulo">Palavras-chave</span>
+            <div class="etiquetas">@foreach (var tag in tags) { <span>@tag</span> }</div>
+        </div>
+    }
+
+    void Trecho(string? trecho, string titulo)
+    {
+        <div class="detalhe-campo">
+            <span class="rotulo">@titulo</span>
+            @if (string.IsNullOrWhiteSpace(trecho)) { <p class="texto-suave">Sem trecho registrado para este item.</p> }
+            else { <blockquote>@trecho</blockquote> }
+        </div>
+    }
+
+    void Origem(Guid? conversaId)
+    {
+        var data = Model.DataDaConversa(conversaId);
+        if (data is null) return;
+        <p class="detalhe-origem">Registrado a partir da conversa de @data.</p>
+    }
+}
+<a class="voltar" asp-page="Index">← Clientes</a>
+<div asp-validation-summary="All" class="text-danger" role="alert"></div>
 @if (!Model.BancoConfigurado) { <partial name="_DatabaseNotice" /> }
 @if (Model.Cliente is { } cliente)
 {
-    <h1>@cliente.Nome</h1>
-    <p>@cliente.Email · @cliente.Telefone</p><p>Perfil financeiro: @cliente.PerfilFinanceiro · Personalidade: @cliente.Personalidade</p>
+    var ultima = Model.Conversas.FirstOrDefault(x => x.Status == StatusConversa.Concluida);
+    <header class="perfil-topo">
+        <p class="eyebrow">PERFIL DO CLIENTE</p>
+        <h1>@cliente.Nome</h1>
+        <p class="perfil-contato">@string.Join(" · ", new[] { cliente.Email, cliente.Telefone }.Where(x => !string.IsNullOrWhiteSpace(x)))</p>
+        <div class="perfil-chips">
+            @if (!string.IsNullOrWhiteSpace(cliente.PerfilFinanceiro)) { <span class="chip"><small>Perfil financeiro</small>@cliente.PerfilFinanceiro</span> }
+            @if (!string.IsNullOrWhiteSpace(cliente.Personalidade)) { <span class="chip"><small>Personalidade · estimada pela IA</small>@cliente.Personalidade</span> }
+            @if (ultima?.Sentimento is not null) { <span class="chip"><small>Tom da última conversa</small>@Rotulos.Tom(ultima.Sentimento)</span> }
+        </div>
+    </header>
     @if (Configuration.GetValue("Fakes:Transcricao", false) || Configuration.GetValue("Fakes:Analise", false))
     {
         <div class="alert alert-warning">Modo de demonstração: transcrição ou análise fictícias estão ativadas.</div>
     }
-    else
+    else if (!AnalysisRegistration.AnaliseRealConfigurada(Configuration))
     {
-        <div class="alert alert-info">O áudio é transcrito localmente. A análise automática ainda não está disponível; confira a transcrição no histórico.</div>
+        <div class="alert alert-info">O áudio é transcrito localmente. A análise automática está desligada porque a chave da OpenAI não foi configurada; confira a transcrição no histórico.</div>
     }
-    <h2>Adicionar conversa</h2>
-    <form method="post" asp-page-handler="Texto" class="mb-4">
-        <label asp-for="Data">Data da conversa</label><input asp-for="Data" type="date" class="form-control" required />
-        <label asp-for="Texto">Transcrição</label><textarea asp-for="Texto" class="form-control" rows="4" minlength="50" required></textarea>
-        <button class="btn btn-primary mt-2">Processar texto</button>
-    </form>
-    <form method="post" asp-page-handler="Audio" enctype="multipart/form-data" class="mb-4">
-        <label for="data-audio">Data da conversa</label><input name="Data" id="data-audio" type="date" value="@Model.Data.ToString("yyyy-MM-dd")" class="form-control" required />
-        <label asp-for="Audio">Áudio (WAV, MP3 ou M4A, até 200 MB)</label><input asp-for="Audio" type="file" accept=".wav,.mp3,.m4a" class="form-control" required />
-        <button class="btn btn-primary mt-2">Processar áudio</button>
-    </form>
-    var ultima = Model.Conversas.FirstOrDefault(x => x.Status == StatusConversa.Concluida);
-    @if (ultima is not null)
-    {
-        <h2>Última conversa — @ultima.Data.ToString("dd/MM/yyyy")</h2>
-        @if (ultima.Sentimento is not null) { <p>Tom da conversa — estimado pela IA: @ultima.Sentimento</p> }
-        <ul>@foreach (var item in ultima.Resumo) { <li>@item</li> }</ul>
-    }
-    <h2>Memória do relacionamento</h2>
-    @if (Model.Insights.Count == 0) { <p>Envie uma conversa para alimentar a memória deste cliente.</p> }
-    @foreach (var grupo in Model.Insights.GroupBy(x => x.Categoria))
-    {
-        <h3>@grupo.Key</h3>
-        @foreach (var insight in grupo)
-        {
-            <p>@insight.Conteudo</p>
-            <details><summary>Trecho de origem</summary><blockquote>@insight.TrechoDeOrigem</blockquote></details>
-        }
-    }
-    <h2>Próximas ações</h2>
-    @if (Model.Tarefas.Count == 0) { <p>Nenhuma tarefa registrada.</p> }
-    <ul>@foreach (var tarefa in Model.Tarefas) { <li>@tarefa.Descricao — @(tarefa.Concluida ? "Concluída" : "Pendente") @tarefa.DataOpcional?.ToString("dd/MM/yyyy")</li> }</ul>
-    <h2>Histórico</h2>
-    @foreach (var conversa in Model.Conversas)
-    {
-        <div class="border rounded p-3 mb-2">
-            <strong>@conversa.Data.ToString("dd/MM/yyyy") · @conversa.Origem</strong>
-            <span data-status-id="@conversa.Id" data-status="@conversa.Status">@conversa.Status</span>
-            @if (conversa.Transcricao?.StartsWith("Transcrição fictícia de demonstração.", StringComparison.Ordinal) == true)
+
+    <div class="grade grade-2">
+        <section class="cartao" aria-labelledby="titulo-ultima">
+            <span class="rotulo">Última conversa</span>
+            @if (ultima is null)
             {
-                <p class="text-warning">Esta conversa foi criada com a transcrição de demonstração. Envie o áudio novamente para obter a transcrição real.</p>
+                <h2 class="cartao-titulo" id="titulo-ultima">Nenhuma conversa concluída</h2>
+                <p class="texto-suave">Envie um áudio ou cole uma transcrição para começar a memória deste cliente.</p>
             }
-            @if (conversa.Status == StatusConversa.Erro)
+            else
             {
-                <p class="text-danger">@conversa.MensagemDeErro</p>
-                <form method="post" asp-page-handler="Reprocessar">
-                    <input type="hidden" name="conversaId" value="@conversa.Id" />
-                    <button class="btn btn-primary">Tentar novamente</button>
-                </form>
+                <h2 class="cartao-titulo" id="titulo-ultima">@ultima.Data.ToString("d 'de' MMMM 'de' yyyy", ptBr)</h2>
+                <p class="selos">
+                    @if (ultima.Sentimento is not null) { <span class="selo @Rotulos.ClasseTom(ultima.Sentimento)">Tom: @Rotulos.Tom(ultima.Sentimento)</span> }
+                    <span class="selo">@Rotulos.Origem(ultima.Origem)</span>
+                </p>
+                @if (ultima.Resumo.Count == 0) { <p class="texto-suave">Esta conversa não tem resumo.</p> }
+                else { <ul class="resumo">@foreach (var item in ultima.Resumo) { <li>@item</li> }</ul> }
             }
-            <details><summary>@(Model.TranscricoesParciais.Contains(conversa.Id) ? "Transcrição parcial — processamento interrompido" : "Transcrição")</summary><p data-transcricao-id="@conversa.Id" style="white-space: pre-wrap">@conversa.Transcricao</p></details>
+        </section>
+        <section class="cartao nova-conversa" aria-labelledby="titulo-nova">
+            <span class="rotulo">Nova conversa</span>
+            <h2 class="cartao-titulo" id="titulo-nova">Adicionar conversa</h2>
+            <ul class="nav nav-pills" role="tablist">
+                <li class="nav-item" role="presentation"><button class="nav-link active" id="aba-texto" data-bs-toggle="pill" data-bs-target="#painel-texto" type="button" role="tab" aria-controls="painel-texto" aria-selected="true">Colar transcrição</button></li>
+                <li class="nav-item" role="presentation"><button class="nav-link" id="aba-audio" data-bs-toggle="pill" data-bs-target="#painel-audio" type="button" role="tab" aria-controls="painel-audio" aria-selected="false">Enviar áudio</button></li>
+            </ul>
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="painel-texto" role="tabpanel" aria-labelledby="aba-texto" tabindex="0">
+                    <form method="post" asp-page-handler="Texto">
+                        <label asp-for="Data">Data da conversa</label><input asp-for="Data" type="date" class="form-control" required />
+                        <label asp-for="Texto">Transcrição</label><textarea asp-for="Texto" class="form-control" rows="5" minlength="50" required></textarea>
+                        <button class="btn btn-primary">Processar texto</button>
+                    </form>
+                </div>
+                <div class="tab-pane fade" id="painel-audio" role="tabpanel" aria-labelledby="aba-audio" tabindex="0">
+                    <form method="post" asp-page-handler="Audio" enctype="multipart/form-data">
+                        <label for="data-audio">Data da conversa</label><input name="Data" id="data-audio" type="date" value="@Model.Data.ToString("yyyy-MM-dd")" class="form-control" required />
+                        <label asp-for="Audio">Áudio (WAV, MP3 ou M4A, até 200 MB)</label><input asp-for="Audio" type="file" accept=".wav,.mp3,.m4a" class="form-control" required />
+                        <button class="btn btn-primary">Processar áudio</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <section class="secao" id="insights" aria-labelledby="titulo-insights">
+        <div class="secao-cabecalho">
+            <div><span class="rotulo">Para o assessor</span><h2 id="titulo-insights">Insights</h2></div>
+            <p class="secao-nota">Sinais percebidos pela IA nas conversas, para apoiar o aconselhamento. Não são recomendação de investimento nem substituem o suitability.</p>
         </div>
-    }
+        @if (Model.InsightsIndisponiveis)
+        {
+            <div class="alert alert-warning">Os insights não puderam ser lidos. Se a tabela insights_assessor ainda não existe no banco, aplique MemoriaRelacionamento/db/insights_assessor.sql no Supabase.</div>
+        }
+        else if (Model.InsightsAssessor.Count == 0) { <p class="vazio">Nenhum sinal identificado até agora.</p> }
+        else
+        {
+            <div class="grade grade-3 grade-esticada">
+                @foreach (var insight in Model.InsightsAssessor)
+                {
+                    <partial name="_InsightCartao" model="new InsightCartao(insight, Model.DataDaConversa(insight.ConversaId))" />
+                }
+            </div>
+        }
+    </section>
+
+    <section class="secao" id="memoria" aria-labelledby="titulo-memoria">
+        <div class="secao-cabecalho">
+            <div><span class="rotulo">O que já sabemos</span><h2 id="titulo-memoria">Memória do relacionamento</h2></div>
+            <p class="secao-nota">Clique em um item para ver o trecho da conversa que o originou.</p>
+        </div>
+        @if (Model.MemoriaVazia) { <p class="vazio">Envie uma conversa para alimentar a memória deste cliente.</p> }
+        else
+        {
+            <div class="grade grade-3">
+                @foreach (var grupo in Model.PerfilPessoal.GroupBy(x => Rotulos.GrupoPessoal(x.Tags)).OrderBy(x => Array.IndexOf(Rotulos.GruposPessoais, x.Key)))
+                {
+                    <div class="cartao grupo">
+                        <h3>@grupo.Key <span class="contagem">@grupo.Count()</span></h3>
+                        <ul class="itens">
+                            @foreach (var item in grupo)
+                            {
+                                var detalhe = $"pessoal-{item.Id:N}";
+                                <li>
+                                    <button type="button" class="item" data-detalhe="@detalhe" data-detalhe-rotulo="Memória do relacionamento" data-detalhe-titulo="@grupo.Key">
+                                        <span class="item-texto">@item.Conteudo</span><span class="item-seta" aria-hidden="true">→</span>
+                                    </button>
+                                    <template id="@detalhe">
+                                        <div class="detalhe-campo"><span class="rotulo">Informação</span><p class="detalhe-destaque">@item.Conteudo</p></div>
+                                        @{ Etiquetas(Rotulos.Etiquetas(item.Tags)); Trecho(item.TrechoDeOrigem, "Trecho de origem"); Origem(item.ConversaId); }
+                                    </template>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+                @if (Model.Eventos.Count > 0)
+                {
+                    <div class="cartao grupo">
+                        <h3>Datas e eventos <span class="contagem">@Model.Eventos.Count</span></h3>
+                        <ul class="itens">
+                            @foreach (var evento in Model.Eventos)
+                            {
+                                var detalhe = $"evento-{evento.Id:N}";
+                                var anual = Rotulos.Anual(evento.Tags);
+                                var proxima = evento.DataEvento is { } data ? Rotulos.ProximaOcorrencia(data, anual, hoje) : (DateOnly?)null;
+                                var quando = proxima is { } dia ? $"{dia:dd/MM/yyyy} · {Rotulos.Distancia(dia, hoje)}{(anual ? " · todo ano" : "")}" : "Sem data definida";
+                                <li>
+                                    <button type="button" class="item" data-detalhe="@detalhe" data-detalhe-rotulo="Memória do relacionamento" data-detalhe-titulo="Datas e eventos">
+                                        <span class="item-texto">@evento.Conteudo<small>@quando</small></span><span class="item-seta" aria-hidden="true">→</span>
+                                    </button>
+                                    <template id="@detalhe">
+                                        <div class="detalhe-campo"><span class="rotulo">Evento</span><p class="detalhe-destaque">@evento.Conteudo</p></div>
+                                        <div class="detalhe-campo"><span class="rotulo">Quando</span><p>@quando</p></div>
+                                        @{ Etiquetas(Rotulos.Etiquetas(evento.Tags)); Trecho(evento.TrechoOrigem, "Trecho de origem"); }
+                                    </template>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+                @if (Model.Financeiro.Count > 0)
+                {
+                    <div class="cartao grupo">
+                        <h3>Financeiro <span class="contagem">@Model.Financeiro.Count</span></h3>
+                        <ul class="itens">
+                            @foreach (var item in Model.Financeiro)
+                            {
+                                var detalhe = $"financeiro-{item.Id:N}";
+                                <li>
+                                    <button type="button" class="item" data-detalhe="@detalhe" data-detalhe-rotulo="Memória do relacionamento" data-detalhe-titulo="Financeiro · @Rotulos.GrupoFinanceiro(item.Tags)">
+                                        <span class="item-texto">@item.Conteudo<small>@Rotulos.GrupoFinanceiro(item.Tags)</small></span><span class="item-seta" aria-hidden="true">→</span>
+                                    </button>
+                                    <template id="@detalhe">
+                                        <div class="detalhe-campo"><span class="rotulo">O que o cliente disse</span><p class="detalhe-destaque">@item.Conteudo</p></div>
+                                        @{ Etiquetas(Rotulos.Etiquetas(item.Tags)); Trecho(item.TrechoOrigem, "Trecho de origem"); }
+                                        <p class="detalhe-origem">Registro do que o cliente disse. Não é recomendação de investimento.</p>
+                                    </template>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="secao" id="acoes" aria-labelledby="titulo-acoes">
+        <div class="secao-cabecalho">
+            <div><span class="rotulo">Próximos passos</span><h2 id="titulo-acoes">Ações e pautas</h2></div>
+            <p class="secao-nota">Marque o círculo para concluir. Clique no texto para ver os detalhes.</p>
+        </div>
+        <div class="grade grade-2">
+            @foreach (var (titulo, vazio, rotulo, acoes) in new[]
+            {
+                (Titulo: "Tarefas do assessor", Vazio: "Nenhuma tarefa registrada.", Rotulo: "Tarefa", Acoes: Model.Tarefas),
+                (Titulo: "Pautas para a próxima conversa", Vazio: "Nenhuma pauta sugerida.", Rotulo: "Pauta sugerida pela IA", Acoes: Model.Pautas),
+            })
+            {
+                <div class="cartao grupo">
+                    <h3>@titulo <span class="contagem">@acoes.Count(x => !x.Concluida)</span></h3>
+                    @if (acoes.Count == 0) { <p class="texto-suave">@vazio</p> }
+                    <ul class="itens">
+                        @foreach (var acao in acoes)
+                        {
+                            var detalhe = $"acao-{acao.Id:N}";
+                            var prazo = acao.DataOpcional is { } data ? $"Prazo: {data:dd/MM/yyyy} · {Rotulos.Distancia(data, hoje)}" : null;
+                            var alternar = acao.Concluida ? "Reabrir" : "Marcar como concluída";
+                            <li class="item-acao @(acao.Concluida ? "concluida" : "")">
+                                <form method="post" asp-page-handler="AlternarAcao" class="form-limpo">
+                                    <input type="hidden" name="acaoId" value="@acao.Id" />
+                                    <button class="marcar" aria-label="@alternar: @acao.Descricao" title="@alternar">@(acao.Concluida ? "✓" : "")</button>
+                                </form>
+                                <button type="button" class="item" data-detalhe="@detalhe" data-detalhe-rotulo="@rotulo" data-detalhe-titulo="@(acao.Concluida ? "Concluída" : "Pendente")">
+                                    <span class="item-texto">
+                                        @acao.Descricao
+                                        @if (prazo is not null && !acao.Concluida) { <small>@prazo</small> }
+                                    </span><span class="item-seta" aria-hidden="true">→</span>
+                                </button>
+                                <template id="@detalhe">
+                                    <div class="detalhe-campo"><span class="rotulo">@rotulo</span><p class="detalhe-destaque">@acao.Descricao</p></div>
+                                    @if (prazo is not null) { <div class="detalhe-campo"><span class="rotulo">Prazo</span><p>@prazo.Replace("Prazo: ", "")</p></div> }
+                                    @{ Etiquetas(Rotulos.Etiquetas(acao.Tags)); Origem(acao.ConversaId); }
+                                    <form method="post" asp-page-handler="AlternarAcao" class="form-limpo detalhe-acao">
+                                        <input type="hidden" name="acaoId" value="@acao.Id" />
+                                        <button class="btn btn-primary">@alternar</button>
+                                    </form>
+                                </template>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="secao" id="historico" aria-labelledby="titulo-historico">
+        <div class="secao-cabecalho">
+            <div><span class="rotulo">Linha do tempo</span><h2 id="titulo-historico">Histórico de conversas</h2></div>
+        </div>
+        @if (Model.Conversas.Count == 0) { <p class="vazio">Nenhuma conversa registrada.</p> }
+        @foreach (var conversa in Model.Conversas)
+        {
+            var detalhe = $"conversa-{conversa.Id:N}";
+            var concluida = conversa.Status == StatusConversa.Concluida;
+            <div class="cartao conversa">
+                <div class="conversa-topo">
+                    <strong>@conversa.Data.ToString("dd/MM/yyyy")</strong>
+                    <span class="texto-suave">@Rotulos.Origem(conversa.Origem)</span>
+                    <span class="selo" data-status-id="@conversa.Id" data-status="@conversa.Status">@Rotulos.Status(conversa.Status)</span>
+                    @if (conversa.Sentimento is not null) { <span class="selo @Rotulos.ClasseTom(conversa.Sentimento)">Tom: @Rotulos.Tom(conversa.Sentimento)</span> }
+                    @if (concluida)
+                    {
+                        <button type="button" class="ver-mais" data-detalhe="@detalhe" data-detalhe-rotulo="Conversa · @Rotulos.Origem(conversa.Origem)" data-detalhe-titulo="@conversa.Data.ToString("d 'de' MMMM 'de' yyyy", ptBr)">Ver conversa →</button>
+                    }
+                </div>
+                @if (conversa.Transcricao?.StartsWith("Transcrição fictícia de demonstração.", StringComparison.Ordinal) == true)
+                {
+                    <p class="text-warning">Esta conversa foi criada com a transcrição de demonstração. Envie o áudio novamente para obter a transcrição real.</p>
+                }
+                @if (conversa.Status == StatusConversa.Erro)
+                {
+                    <p class="text-danger">@conversa.MensagemDeErro</p>
+                    <form method="post" asp-page-handler="Reprocessar" class="form-limpo">
+                        <input type="hidden" name="conversaId" value="@conversa.Id" />
+                        <button class="btn btn-primary">Tentar novamente</button>
+                    </form>
+                }
+                @if (concluida)
+                {
+                    <template id="@detalhe">
+                        @if (conversa.Sentimento is not null) { <p class="selos"><span class="selo @Rotulos.ClasseTom(conversa.Sentimento)">Tom: @Rotulos.Tom(conversa.Sentimento)</span></p> }
+                        @if (conversa.Resumo.Count > 0)
+                        {
+                            <div class="detalhe-campo"><span class="rotulo">Resumo</span><ul class="resumo">@foreach (var item in conversa.Resumo) { <li>@item</li> }</ul></div>
+                        }
+                        <div class="detalhe-campo"><span class="rotulo">Transcrição</span><p class="transcricao">@conversa.Transcricao</p></div>
+                    </template>
+                }
+                else
+                {
+                    @* Fica na página, fora do popup, porque conversa-status.js atualiza este texto durante a transcrição. *@
+                    <details><summary>@(Model.TranscricoesParciais.Contains(conversa.Id) ? "Transcrição parcial — processamento interrompido" : "Transcrição")</summary><p class="transcricao" data-transcricao-id="@conversa.Id">@conversa.Transcricao</p></details>
+                }
+            </div>
+        }
+    </section>
+
+    <partial name="_DetalheModal" />
 }
 @section Scripts {
     <script src="~/js/conversa-status.js" asp-append-version="true"></script>
+    <script src="~/js/detalhe-modal.js" asp-append-version="true"></script>
 }

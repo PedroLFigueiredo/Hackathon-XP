@@ -35,21 +35,27 @@ public class ConversaProcessor(AppDbContext db, ITranscriptionService transcript
             var facts = await db.Insights.Where(x => x.ClienteId == cliente.Id).Select(x => x.Conteudo).ToListAsync(ct);
             facts.AddRange(await db.Eventos.Where(x => x.ClienteId == cliente.Id).Select(x => x.Conteudo).ToListAsync(ct));
             facts.AddRange(await db.Financeiro.Where(x => x.ClienteId == cliente.Id).Select(x => x.Conteudo).ToListAsync(ct));
-            var result = await analysis.AnalisarAsync(new(cliente.Nome, conversa.Data, conversa.Transcricao, facts), ct);
+            var result = await analysis.AnalisarAsync(new(cliente.Nome, conversa.Data, conversa.Transcricao, facts, cliente.PerfilFinanceiro), ct);
             // Resultado e status final são persistidos juntos, evitando saída parcial.
             conversa.Resumo = result.Resumo;
             conversa.Sentimento = result.Sentimento;
-            conversa.PautasSugeridas = result.PautasSugeridas;
-            foreach (var insight in result.Insights)
-            {
-                if (insight.Categoria == CategoriaInsight.Evento)
-                    db.Eventos.Add(new InformacaoEvento { ClienteId = cliente.Id, Conteudo = insight.Conteudo, TrechoOrigem = insight.TrechoDeOrigem, DataEvento = insight.DataReferencia });
-                else if (insight.Categoria == CategoriaInsight.Objetivo)
-                    db.Financeiro.Add(new InformacaoFinanceira { ClienteId = cliente.Id, Conteudo = insight.Conteudo, TrechoOrigem = insight.TrechoDeOrigem });
-                else db.Insights.Add(new InformacaoInsight { ClienteId = cliente.Id, ConversaId = id, Categoria = insight.Categoria, Conteudo = insight.Conteudo, TrechoDeOrigem = insight.TrechoDeOrigem, DataReferencia = insight.DataReferencia, RecorrenteAnual = insight.RecorrenteAnual });
-            }
+            foreach (var info in result.PerfilPessoal)
+                db.Insights.Add(new InformacaoInsight { ClienteId = cliente.Id, ConversaId = id, Conteudo = info.Conteudo, TrechoDeOrigem = info.TrechoOrigem, Tags = [.. info.Tags] });
+            foreach (var evento in result.Eventos)
+                db.Eventos.Add(new InformacaoEvento { ClienteId = cliente.Id, Conteudo = evento.Conteudo, DataEvento = evento.DataEvento, TrechoOrigem = evento.TrechoOrigem, Tags = [.. evento.Tags] });
+            foreach (var info in result.Financeiro)
+                db.Financeiro.Add(new InformacaoFinanceira { ClienteId = cliente.Id, Conteudo = info.Conteudo, TrechoOrigem = info.TrechoOrigem, Tags = [.. info.Tags] });
             foreach (var action in result.Acoes)
-                db.ToDos.Add(new AcaoToDo { ClienteId = cliente.Id, ConversaId = id, Descricao = action.Descricao, DataOpcional = action.Data });
+                db.ToDos.Add(new AcaoToDo { ClienteId = cliente.Id, ConversaId = id, Descricao = action.Descricao, DataOpcional = action.Data, Tags = [TagsReservadas.Tarefa, .. action.Tags.Where(x => x != TagsReservadas.Tarefa)] });
+            foreach (var insight in result.InsightsAssessor)
+                db.InsightsAssessor.Add(new InsightAssessor { ClienteId = cliente.Id, ConversaId = id, Tipo = insight.Tipo, Conteudo = insight.Conteudo, Sugestao = insight.Sugestao, TrechoOrigem = insight.TrechoOrigem });
+            // O schema não tem coluna de pautas: elas entram em acoes, marcadas pela tag.
+            foreach (var pauta in result.PautasSugeridas)
+                db.ToDos.Add(new AcaoToDo { ClienteId = cliente.Id, ConversaId = id, Descricao = pauta, Tags = [TagsReservadas.Pauta] });
+            // A personalidade segue a conversa mais recente; o perfil financeiro do cadastro nunca é sobrescrito.
+            var haMaisRecente = await db.Conversas.AnyAsync(x => x.ClienteId == cliente.Id && x.Id != id && x.DataRegistro > conversa.DataRegistro, ct);
+            if (result.Personalidade is not null && !haMaisRecente) cliente.Personalidade = result.Personalidade;
+            if (result.PerfilFinanceiro is not null && string.IsNullOrWhiteSpace(cliente.PerfilFinanceiro)) cliente.PerfilFinanceiro = result.PerfilFinanceiro;
             conversa.Status = StatusConversa.Concluida;
             etapa = "salvar o resultado";
             await db.SaveChangesAsync(ct);
@@ -62,7 +68,8 @@ public class ConversaProcessor(AppDbContext db, ITranscriptionService transcript
             conversa = await db.Conversas.SingleAsync(x => x.Id == id, ct);
             conversa.Status = StatusConversa.Erro;
             if (!string.IsNullOrWhiteSpace(transcricaoCompleta)) conversa.Transcricao = transcricaoCompleta;
-            var detalhe = etapa == "transcrever o áudio" ? exception.GetBaseException().Message : exception.GetBaseException().GetType().Name;
+            var detalhe = exception is AnaliseException ? exception.Message
+                : etapa == "transcrever o áudio" ? exception.GetBaseException().Message : exception.GetBaseException().GetType().Name;
             if (detalhe.Length > 300) detalhe = detalhe[..300];
             conversa.MensagemDeErro = $"Não foi possível {etapa}. Detalhe: {detalhe}. Tente novamente nesta conversa.";
             await db.SaveChangesAsync(ct);

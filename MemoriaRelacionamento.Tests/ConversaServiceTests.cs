@@ -95,6 +95,30 @@ public class ConversaServiceTests : IDisposable
         await Assert.ThrowsAsync<ArgumentException>(() => Servico(db).ReprocessarAsync(cli.Id, id, default));
     }
 
+    [Fact]
+    public async Task Conversa_com_audio_em_outra_maquina_nao_e_retomada_aqui()
+    {
+        // O banco é compartilhado, mas o áudio fica no disco de quem o recebeu.
+        Assert.False(ConversaWorker.PodeRecuperar(@"C:\Users\outra-pessoa\uploads\reuniao.m4a", null));
+        Assert.True(ConversaWorker.PodeRecuperar(@"C:\Users\outra-pessoa\uploads\reuniao.m4a", "transcrição já salva"));
+        Assert.True(ConversaWorker.PodeRecuperar("", "conversa enviada por texto"));
+        var local = Path.GetTempFileName();
+        try { Assert.True(ConversaWorker.PodeRecuperar(local, null)); }
+        finally { File.Delete(local); }
+
+        var cli = await _banco.CriarClienteAsync();
+        var id = await Fabrica.ConversaAsync(_banco, cli.Id, OrigemConversa.Audio, null, @"C:\Users\outra-pessoa\uploads\reuniao.m4a");
+        await using var db = _banco.Novo();
+        var conversa = await db.Conversas.SingleAsync(x => x.Id == id);
+        conversa.Status = StatusConversa.Erro;
+        await db.SaveChangesAsync();
+
+        var erro = await Assert.ThrowsAsync<ArgumentException>(() => Servico(db).ReprocessarAsync(cli.Id, id, default));
+
+        Assert.Contains("outro computador", erro.Message);
+        Assert.Equal(StatusConversa.Erro, (await db.Conversas.SingleAsync(x => x.Id == id)).Status);
+    }
+
     [Theory]
     [InlineData("Reuniao.MP3", ".mp3")]
     [InlineData("a.wav", ".wav")]

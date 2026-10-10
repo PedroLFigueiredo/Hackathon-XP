@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<InformacaoEvento> Eventos => Set<InformacaoEvento>();
     public DbSet<InformacaoFinanceira> Financeiro => Set<InformacaoFinanceira>();
+    public DbSet<InsightAssessor> InsightsAssessor => Set<InsightAssessor>();
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.Entity<Cliente>().ToTable("clientes");
@@ -41,6 +42,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         model.Entity<InformacaoFinanceira>().ToTable("informacao_financeiro");
         model.Entity<InformacaoEvento>().HasOne<Cliente>().WithMany().HasForeignKey(x => x.ClienteId).OnDelete(DeleteBehavior.Cascade);
         model.Entity<InformacaoFinanceira>().HasOne<Cliente>().WithMany().HasForeignKey(x => x.ClienteId).OnDelete(DeleteBehavior.Cascade);
+        model.Entity<InsightAssessor>().ToTable("insights_assessor");
+        model.Entity<InsightAssessor>().HasOne<Cliente>().WithMany().HasForeignKey(x => x.ClienteId).OnDelete(DeleteBehavior.Cascade);
+        model.Entity<InsightAssessor>().HasOne<Conversa>().WithMany().HasForeignKey(x => x.ConversaId).OnDelete(DeleteBehavior.Cascade);
         model.Entity<Conversa>().Property(x => x.DataRegistro).HasColumnName("data");
         model.Entity<Conversa>().Property(x => x.CaminhoDoAudio).HasColumnName("caminho_audio").IsRequired();
         model.Entity<Conversa>().Property(x => x.Sentimento).HasColumnName("tom");

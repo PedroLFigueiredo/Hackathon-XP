@@ -1,5 +1,6 @@
 @page
 @model IndexModel
+@inject IConfiguration Configuration
 @{ ViewData["Title"] = "Memória de relacionamento"; }
 <section class="xp-hero">
     <div class="hero-copy">
@@ -28,4 +29,7 @@
     </div>
 </section>
 <section class="xp-closing"><h2>Mais contexto.<br>Mais tempo.<br><span>Mais possibilidades.</span></h2><a class="btn btn-light" asp-page="/Clientes/Index">Conhecer meus clientes <span aria-hidden="true">→</span></a></section>
-<p class="demo-notice">Ambiente de demonstração: transcrição e análise usam serviços fictícios nesta versão.</p>
+@if (Configuration.GetValue("Fakes:Transcricao", false) || Configuration.GetValue("Fakes:Analise", false))
+{
+    <p class="demo-notice">Modo de demonstração: transcrição ou análise fictícias estão ativadas.</p>
+}

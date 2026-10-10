@@ -82,10 +82,12 @@ public class AnaliseStub : IConversationAnalysisService
     public AnaliseRequest? Ultima;
     public AnaliseConversa Resultado = new(
         new() { "um", "dois", "três" },
-        Sentimento.Satisfeito,
-        new() { new(CategoriaInsight.Familia, "Filha Marina", "a filha Marina", null, false) },
-        new() { new("Enviar simulação", new DateOnly(2026, 10, 20)) },
-        new() { "Perguntar da viagem" });
+        Sentimento.Satisfeito, null, null,
+        new() { new("Filha Marina", "a filha Marina", new() { "familia", "filha" }) },
+        new(),
+        new(),
+        new() { new("Enviar simulação", new DateOnly(2026, 10, 20), new() { "previdencia" }) },
+        new());
 
     public Task<AnaliseConversa> AnalisarAsync(AnaliseRequest request, CancellationToken ct)
     {

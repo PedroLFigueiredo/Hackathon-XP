@@ -1,0 +1,69 @@
+@page
+@model InsightsModel
+@using MemoriaRelacionamento.Models
+@{ ViewData["Title"] = Model.Selecionado is null ? "Insights" : $"Insights · {Model.Selecionado.Nome}"; }
+<div class="page-heading">
+    <p class="eyebrow">PARA O ASSESSOR</p>
+    <h1>Insights</h1>
+    <p>Escolha um cliente para ver os sinais que a IA percebeu nas conversas dele. Não são recomendação de investimento nem substituem o suitability.</p>
+</div>
+@if (!Model.BancoConfigurado) { <partial name="_DatabaseNotice" /> }
+else if (Model.Erro is not null) { <div class="alert alert-danger" role="alert">@Model.Erro</div> }
+else if (Model.Clientes.Count == 0) { <p class="vazio">Nenhum cliente cadastrado. <a asp-page="/Demo">Crie seis clientes fictícios para demonstrar o sistema.</a></p> }
+else
+{
+    <div class="insights-tela">
+        <nav class="cartao grupo" aria-labelledby="titulo-clientes">
+            <h2 class="rotulo" id="titulo-clientes">Clientes</h2>
+            <ul class="itens">
+                @foreach (var item in Model.Clientes)
+                {
+                    var ativo = item.Cliente.Id == Model.ClienteId;
+                    <li>
+                        <a class="item @(ativo ? "ativo" : "")" asp-page="/Insights" asp-route-cliente="@item.Cliente.Id" aria-current="@(ativo ? "page" : null)">
+                            <span class="item-texto">@item.Cliente.Nome</span>
+                            <span class="contagem" title="@item.Insights insight(s)">@item.Insights</span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        </nav>
+        <section aria-live="polite">
+            @if (Model.Selecionado is not { } cliente)
+            {
+                <p class="vazio">Selecione um cliente na lista para ver os insights dele.</p>
+            }
+            else
+            {
+                <div class="insights-cliente">
+                    <div>
+                        <h2>@cliente.Nome</h2>
+                        <p class="texto-suave">
+                            @(Model.Insights.Count == 0 ? "Nenhum insight" : Model.Insights.Count == 1 ? "1 insight" : $"{Model.Insights.Count} insights")
+                            @if (Model.Conversas > 0) { <text> em @(Model.Conversas == 1 ? "1 conversa" : $"{Model.Conversas} conversas")</text> }
+                        </p>
+                    </div>
+                    <a class="ver-mais" asp-page="/Clientes/Detalhe" asp-route-id="@cliente.Id">Abrir perfil completo →</a>
+                </div>
+                <div class="perfil-chips">
+                    @if (!string.IsNullOrWhiteSpace(cliente.PerfilFinanceiro)) { <span class="chip"><small>Perfil financeiro</small>@cliente.PerfilFinanceiro</span> }
+                    @if (!string.IsNullOrWhiteSpace(cliente.Personalidade)) { <span class="chip"><small>Personalidade · estimada pela IA</small>@cliente.Personalidade</span> }
+                </div>
+                @if (Model.Insights.Count == 0)
+                {
+                    <p class="vazio">Nenhum sinal identificado nas conversas deste cliente até agora. Envie uma conversa pelo <a asp-page="/Clientes/Detalhe" asp-route-id="@cliente.Id">perfil do cliente</a>.</p>
+                }
+                else
+                {
+                    <div class="grade grade-2 grade-esticada">
+                        @foreach (var insight in Model.Insights) { <partial name="_InsightCartao" model="insight" /> }
+                    </div>
+                }
+            }
+        </section>
+    </div>
+    <partial name="_DetalheModal" />
+}
+@section Scripts {
+    <script src="~/js/detalhe-modal.js" asp-append-version="true"></script>
+}

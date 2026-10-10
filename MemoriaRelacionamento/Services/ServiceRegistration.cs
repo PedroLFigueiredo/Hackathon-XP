@@ -1,5 +1,4 @@
 using MemoriaRelacionamento.Data;
-using MemoriaRelacionamento.Services.Fakes;
 using Microsoft.EntityFrameworkCore;
 
 namespace MemoriaRelacionamento.Services;
@@ -20,10 +19,7 @@ public static class ServiceRegistration
             services.AddHostedService<ConversaWorker>();
         }
         services.AddTranscription(configuration);
-        if (configuration.GetValue("Fakes:Analise", false))
-            services.AddScoped<IConversationAnalysisService, FakeConversationAnalysisService>();
-        else
-            services.AddScoped<IConversationAnalysisService, TranscriptOnlyAnalysisService>();
+        services.AddAnalysis(configuration);
         return services;
     }
 }

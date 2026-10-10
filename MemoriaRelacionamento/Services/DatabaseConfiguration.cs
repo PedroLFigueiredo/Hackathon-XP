@@ -14,7 +14,7 @@ public static class DatabaseConfiguration
                 if (directory is null) continue;
                 var file = Path.Combine(directory, ".env");
                 if (!File.Exists(file)) continue;
-                var values = LerArquivo(file);
+                var values = LerArquivo(file, "DATABASE_URL", "ConnectionStrings__Supabase");
                 if (values.TryGetValue("ConnectionStrings__Supabase", out var connection) && !string.IsNullOrWhiteSpace(connection))
                 {
                     builder.Configuration["ConnectionStrings:Supabase"] = connection;
@@ -53,7 +53,7 @@ public static class DatabaseConfiguration
         return connection.ConnectionString;
     }
 
-    private static Dictionary<string, string> LerArquivo(string file)
+    internal static Dictionary<string, string> LerArquivo(string file, params string[] chaves)
     {
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var line in File.ReadLines(file))
@@ -64,7 +64,7 @@ public static class DatabaseConfiguration
             var pair = trimmed.Split('=', 2);
             if (pair.Length != 2) continue;
             var key = pair[0].Trim();
-            if (key is not ("DATABASE_URL" or "ConnectionStrings__Supabase")) continue;
+            if (!chaves.Contains(key, StringComparer.OrdinalIgnoreCase)) continue;
             var value = pair[1].Trim();
             if (value.Length >= 2 && ((value[0] == '\"' && value[^1] == '\"') || (value[0] == '\'' && value[^1] == '\''))) value = value[1..^1];
             values[key] = value;

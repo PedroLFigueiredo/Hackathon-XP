@@ -34,7 +34,7 @@ public class InformacaoInsight
     public string[] Tags { get; set; } = [];
     public string StatusRevisao { get; set; } = "pendente";
     [System.ComponentModel.DataAnnotations.Schema.NotMapped]
-    public CategoriaInsight Categoria { get => Tags is { Length: > 0 } && Enum.TryParse<CategoriaInsight>(Tags[0], out var c) ? c : CategoriaInsight.Outro; set => Tags = [value.ToString()]; }
+    public CategoriaInsight Categoria { get => Tags is { Length: > 0 } && Enum.TryParse<CategoriaInsight>(Tags[0], ignoreCase: true, out var c) ? c : CategoriaInsight.Outro; set => Tags = [value.ToString()]; }
     public string Conteudo { get; set; } = "";
     public string? TrechoDeOrigem { get; set; }
     [System.ComponentModel.DataAnnotations.Schema.NotMapped]
@@ -72,4 +72,35 @@ public class InformacaoFinanceira {
  public string? TrechoOrigem { get; set; }
  public string[] Tags { get; set; } = [];
  public string StatusRevisao { get; set; } = "pendente";
+}
+
+/// <summary>Sinal percebido pela IA numa conversa, para o assessor avaliar. Não é fato do cliente nem recomendação.</summary>
+public class InsightAssessor
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ClienteId { get; set; }
+    public Guid ConversaId { get; set; }
+    public string Tipo { get; set; } = "";
+    public string Conteudo { get; set; } = "";
+    public string? Sugestao { get; set; }
+    public string? TrechoOrigem { get; set; }
+}
+
+public static class TiposDeInsight
+{
+    public const string ApetiteRisco = "apetite_risco";
+    public const string CapacidadeFinanceira = "capacidade_financeira";
+    public const string Oportunidade = "oportunidade";
+    public const string Alerta = "alerta";
+
+    public static readonly IReadOnlyList<string> Todos = [ApetiteRisco, CapacidadeFinanceira, Oportunidade, Alerta];
+
+    public static string Rotulo(string tipo) => tipo switch
+    {
+        ApetiteRisco => "Apetite a risco",
+        CapacidadeFinanceira => "Capacidade financeira",
+        Oportunidade => "Oportunidade de conversa",
+        Alerta => "Ponto de atenção",
+        _ => "Insight",
+    };
 }

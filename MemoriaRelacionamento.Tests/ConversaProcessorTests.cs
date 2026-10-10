@@ -32,7 +32,128 @@ public class ConversaProcessorTests : IDisposable
         Assert.Equal(1, _analise.Chamadas);
         Assert.Equal(3, c.Resumo!.Count);
         Assert.Equal(Sentimento.Satisfeito, c.Sentimento);
-        Assert.Empty(c.PautasSugeridas); // O schema enviado não possui uma coluna para pautas.
+    }
+
+    [Fact]
+    public async Task Cada_tipo_de_informacao_vai_para_a_sua_tabela_com_tags()
+    {
+        _analise.Resultado = _analise.Resultado with
+        {
+            Eventos = new() { new("Aniversário da Marina", new DateOnly(2026, 11, 15), "faz quinze em novembro", new() { "anual", "familia" }) },
+            Financeiro = new() { new("Quer comprar um apartamento na praia", "o apê na praia", new() { "objetivo", "imovel" }) },
+            PautasSugeridas = new() { "Perguntar da viagem" },
+        };
+        var cli = await _banco.CriarClienteAsync();
+        var id = await Fabrica.ConversaAsync(_banco, cli.Id, OrigemConversa.Texto, "texto");
+
+        await ProcessarAsync(id);
+
+        await using var db = _banco.Novo();
+        Assert.Equal(new[] { "familia", "filha" }, (await db.Insights.SingleAsync()).Tags);
+        var evento = await db.Eventos.SingleAsync();
+        Assert.Equal(new DateOnly(2026, 11, 15), evento.DataEvento);
+        Assert.Equal(new[] { "anual", "familia" }, evento.Tags);
+        var financeiro = await db.Financeiro.SingleAsync();
+        Assert.Equal("o apê na praia", financeiro.TrechoOrigem);
+        Assert.Equal(new[] { "objetivo", "imovel" }, financeiro.Tags);
+        var acoes = await db.ToDos.OrderBy(x => x.Descricao).ToListAsync();
+        Assert.Equal(new[] { "tarefa", "previdencia" }, acoes.Single(x => x.Descricao == "Enviar simulação").Tags);
+        // O schema não tem coluna de pautas: elas entram em acoes com a tag reservada.
+        var pauta = acoes.Single(x => x.Descricao == "Perguntar da viagem");
+        Assert.Equal(new[] { "pauta" }, pauta.Tags);
+        Assert.Equal(id, pauta.ConversaId);
+        Assert.False(pauta.Concluida);
+    }
+
+    [Fact]
+    public async Task Insights_do_assessor_sao_gravados_por_conversa_e_o_perfil_cadastrado_vai_na_analise()
+    {
+        _analise.Resultado = _analise.Resultado with
+        {
+            InsightsAssessor = new() { new(TiposDeInsight.ApetiteRisco, "Quer tomar mais risco", "Revisar o perfil com o cliente", "quero arriscar mais") },
+        };
+        var cli = await _banco.CriarClienteAsync();
+        await using (var db = _banco.Novo())
+        {
+            (await db.Clientes.SingleAsync(x => x.Id == cli.Id)).PerfilFinanceiro = "Conservador";
+            await db.SaveChangesAsync();
+        }
+        var primeira = await Fabrica.ConversaAsync(_banco, cli.Id, OrigemConversa.Texto, "texto");
+        var segunda = await Fabrica.ConversaAsync(_banco, cli.Id, OrigemConversa.Texto, "outro texto");
+
+        await ProcessarAsync(primeira);
+        await ProcessarAsync(segunda);
+
+        Assert.Equal("Conservador", _analise.Ultima!.PerfilFinanceiroCadastrado);
+        await using var db2 = _banco.Novo();
+        // Sinais agregam: cada conversa acrescenta os seus, sem apagar os anteriores.
+        var insights = await db2.InsightsAssessor.ToListAsync();
+        Assert.Equal(new[] { primeira, segunda }.Order(), insights.Select(x => x.ConversaId).Order());
+        Assert.All(insights, x =>
+        {
+            Assert.Equal(cli.Id, x.ClienteId);
+            Assert.Equal("apetite_risco", x.Tipo);
+            Assert.Equal("Revisar o perfil com o cliente", x.Sugestao);
+            Assert.Equal("quero arriscar mais", x.TrechoOrigem);
+        });
+    }
+
+    [Fact]
+    public async Task Personalidade_e_atualizada_e_perfil_financeiro_so_preenche_quando_vazio()
+    {
+        _analise.Resultado = _analise.Resultado with { Personalidade = "Analítico", PerfilFinanceiro = "Arrojado" };
+        var semPerfil = await _banco.CriarClienteAsync("Sem perfil");
+        var comPerfil = await _banco.CriarClienteAsync("Com perfil");
+        await using (var db = _banco.Novo())
+        {
+            var cadastrado = await db.Clientes.SingleAsync(x => x.Id == comPerfil.Id);
+            cadastrado.PerfilFinanceiro = "Conservador";
+            cadastrado.Personalidade = "Reservado";
+            await db.SaveChangesAsync();
+        }
+
+        await ProcessarAsync(await Fabrica.ConversaAsync(_banco, semPerfil.Id, OrigemConversa.Texto, "texto"));
+        await ProcessarAsync(await Fabrica.ConversaAsync(_banco, comPerfil.Id, OrigemConversa.Texto, "texto"));
+
+        await using var db2 = _banco.Novo();
+        var a = await db2.Clientes.SingleAsync(x => x.Id == semPerfil.Id);
+        Assert.Equal("Analítico", a.Personalidade);
+        Assert.Equal("Arrojado", a.PerfilFinanceiro);
+        var b = await db2.Clientes.SingleAsync(x => x.Id == comPerfil.Id);
+        Assert.Equal("Analítico", b.Personalidade);
+        Assert.Equal("Conservador", b.PerfilFinanceiro); // o perfil do cadastro não é sobrescrito pela conversa
+    }
+
+    [Fact]
+    public async Task Analise_sem_personalidade_nao_apaga_a_que_ja_existe()
+    {
+        var cli = await _banco.CriarClienteAsync();
+        await using (var db = _banco.Novo())
+        {
+            (await db.Clientes.SingleAsync(x => x.Id == cli.Id)).Personalidade = "Reservado";
+            await db.SaveChangesAsync();
+        }
+
+        await ProcessarAsync(await Fabrica.ConversaAsync(_banco, cli.Id, OrigemConversa.Texto, "texto"));
+
+        await using var db2 = _banco.Novo();
+        Assert.Equal("Reservado", (await db2.Clientes.SingleAsync(x => x.Id == cli.Id)).Personalidade);
+    }
+
+    [Fact]
+    public async Task Falha_da_analise_mostra_o_motivo_ao_assessor()
+    {
+        _analise.Falha = new MemoriaRelacionamento.Services.AnaliseException("A chave da OpenAI foi recusada. Confira OPENAI_API_KEY");
+        var cli = await _banco.CriarClienteAsync();
+        var id = await Fabrica.ConversaAsync(_banco, cli.Id, OrigemConversa.Texto, "texto");
+
+        await ProcessarAsync(id);
+
+        await using var db = _banco.Novo();
+        var c = await db.Conversas.SingleAsync(x => x.Id == id);
+        Assert.Equal(StatusConversa.Erro, c.Status);
+        Assert.Contains("A chave da OpenAI foi recusada", c.MensagemDeErro);
+        Assert.Empty(await db.Insights.ToListAsync());
     }
 
     [Fact]

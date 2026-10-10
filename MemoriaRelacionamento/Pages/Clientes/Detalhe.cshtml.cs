@@ -15,8 +15,14 @@ public class DetalheModel(ILogger<DetalheModel> logger, AppDbContext? db = null,
     public Cliente? Cliente { get; private set; }
     public List<Conversa> Conversas { get; private set; } = [];
     public HashSet<Guid> TranscricoesParciais { get; } = [];
-    public List<InformacaoInsight> Insights { get; private set; } = [];
+    public List<InformacaoInsight> PerfilPessoal { get; private set; } = [];
+    public List<InformacaoEvento> Eventos { get; private set; } = [];
+    public List<InformacaoFinanceira> Financeiro { get; private set; } = [];
     public List<AcaoToDo> Tarefas { get; private set; } = [];
+    public List<AcaoToDo> Pautas { get; private set; } = [];
+    public bool MemoriaVazia => PerfilPessoal.Count + Eventos.Count + Financeiro.Count == 0;
+    public List<InsightAssessor> InsightsAssessor { get; private set; } = [];
+    public bool InsightsIndisponiveis { get; private set; }
     [BindProperty] public DateOnly Data { get; set; } = DateOnly.FromDateTime(DateTime.Today);
     [BindProperty] public string? Texto { get; set; }
     [BindProperty] public IFormFile? Audio { get; set; }
@@ -43,12 +49,34 @@ public class DetalheModel(ILogger<DetalheModel> logger, AppDbContext? db = null,
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 { logger.LogWarning(ex, "Não foi possível ler a transcrição local de {ConversaId}", conversa.Id); }
             }
-            Insights = await db.Insights.AsNoTracking().Where(x => x.ClienteId == id).ToListAsync(ct);
+            var hoje = DateOnly.FromDateTime(DateTime.Today);
+            var pessoais = await db.Insights.AsNoTracking().Where(x => x.ClienteId == id).ToListAsync(ct);
+            PerfilPessoal = pessoais.OrderBy(x => Conversas.FindIndex(c => c.Id == x.ConversaId)).ToList();
             var eventos = await db.Eventos.AsNoTracking().Where(x => x.ClienteId == id).ToListAsync(ct);
-            Insights.AddRange(eventos.Select(x => new InformacaoInsight { Id = x.Id, ClienteId = id, Categoria = CategoriaInsight.Evento, Conteudo = x.Conteudo, TrechoDeOrigem = x.TrechoOrigem, DataReferencia = x.DataEvento }));
-            var financeiro = await db.Financeiro.AsNoTracking().Where(x => x.ClienteId == id).ToListAsync(ct);
-            Insights.AddRange(financeiro.Select(x => new InformacaoInsight { Id = x.Id, ClienteId = id, Categoria = CategoriaInsight.Objetivo, Conteudo = x.Conteudo, TrechoDeOrigem = x.TrechoOrigem }));
-            Tarefas = await db.ToDos.AsNoTracking().Where(x => x.ClienteId == id).OrderBy(x => x.StatusConclusao).ToListAsync(ct);
+            // Próximos primeiro; depois os sem data; por último os que já passaram.
+            Eventos = eventos
+                .Select(x => (Evento: x, Proxima: x.DataEvento is { } data ? Rotulos.ProximaOcorrencia(data, Rotulos.Anual(x.Tags), hoje) : (DateOnly?)null))
+                .OrderBy(x => x.Proxima is null ? 1 : x.Proxima < hoje ? 2 : 0)
+                .ThenBy(x => x.Proxima >= hoje ? x.Proxima!.Value.DayNumber : -(x.Proxima?.DayNumber ?? 0))
+                .Select(x => x.Evento).ToList();
+            Financeiro = await db.Financeiro.AsNoTracking().Where(x => x.ClienteId == id).ToListAsync(ct);
+            var acoes = await db.ToDos.AsNoTracking().Where(x => x.ClienteId == id).ToListAsync(ct);
+            // Pendentes primeiro, com o prazo mais próximo no topo.
+            var ordenadas = acoes.OrderBy(x => x.Concluida).ThenBy(x => x.DataOpcional ?? DateOnly.MaxValue).ToList();
+            Pautas = ordenadas.Where(x => x.Tags?.Contains(TagsReservadas.Pauta) == true).ToList();
+            Tarefas = ordenadas.Except(Pautas).ToList();
+            try
+            {
+                var insights = await db.InsightsAssessor.AsNoTracking().Where(x => x.ClienteId == id).ToListAsync(ct);
+                // Mais recentes primeiro, na ordem das conversas já carregadas.
+                InsightsAssessor = insights.OrderBy(x => Conversas.FindIndex(c => c.Id == x.ConversaId)).ToList();
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // A tabela é posterior ao schema original; sem ela o resto do perfil continua abrindo.
+                logger.LogError(exception, "Falha ao ler insights do assessor de {ClienteId}", id);
+                InsightsIndisponiveis = true;
+            }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -56,6 +84,29 @@ public class DetalheModel(ILogger<DetalheModel> logger, AppDbContext? db = null,
             ModelState.AddModelError("", "Não foi possível abrir o perfil. Verifique a conexão e o schema do Supabase.");
         }
         return Page();
+    }
+
+    public string? DataDaConversa(Guid? conversaId) => Conversas.FirstOrDefault(x => x.Id == conversaId)?.Data.ToString("dd/MM/yyyy");
+
+    public async Task<IActionResult> OnPostAlternarAcaoAsync(Guid id, Guid acaoId, CancellationToken ct)
+    {
+        if (db is null) return StatusCode(503);
+        try
+        {
+            var acao = await db.ToDos.SingleOrDefaultAsync(x => x.Id == acaoId && x.ClienteId == id, ct);
+            if (acao is not null)
+            {
+                acao.Concluida = !acao.Concluida;
+                await db.SaveChangesAsync(ct);
+            }
+            return RedirectToPage(pageName: null, pageHandler: null, routeValues: new { id }, fragment: "acoes");
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(exception, "Falha ao atualizar a ação {AcaoId}", acaoId);
+            ModelState.AddModelError("", "Não foi possível atualizar a ação. Tente novamente.");
+        }
+        return await OnGetAsync(id, ct);
     }
 
     public async Task<IActionResult> OnPostTextoAsync(Guid id, CancellationToken ct) => await EnviarAsync(id, false, ct);

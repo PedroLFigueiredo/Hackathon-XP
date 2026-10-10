@@ -13,6 +13,8 @@ public class ConversaService(AppDbContext db, ConversaQueue queue, IWebHostEnvir
         var conversa = await db.Conversas.SingleOrDefaultAsync(x => x.Id == conversaId && x.ClienteId == clienteId, ct);
         if (conversa is null) throw new ArgumentException("Conversa não encontrada.");
         if (conversa.Status != StatusConversa.Erro) throw new ArgumentException("Esta conversa não está com erro.");
+        if (!ConversaWorker.PodeRecuperar(conversa.CaminhoDoAudio, conversa.Transcricao))
+            throw new ArgumentException("O áudio desta conversa foi enviado por outro computador e não está nesta máquina. Tente novamente no computador que recebeu o arquivo.");
         conversa.Status = StatusConversa.NaFila;
         conversa.MensagemDeErro = null;
         await db.SaveChangesAsync(ct);

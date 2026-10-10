@@ -1,0 +1,24 @@
+@model InsightCartao
+@using MemoriaRelacionamento.Models
+@{
+    var insight = Model.Insight;
+    var detalhe = $"insight-{insight.Id:N}";
+}
+@* O clique abre o popup (_DetalheModal + detalhe-modal.js) com o conteúdo do <template>. *@
+<div>
+    <button type="button" class="cartao cartao-clicavel insight insight-@insight.Tipo" data-detalhe="@detalhe" data-detalhe-rotulo="Insight para o assessor" data-detalhe-titulo="@TiposDeInsight.Rotulo(insight.Tipo)">
+        <span class="rotulo">@TiposDeInsight.Rotulo(insight.Tipo)</span>
+        <span class="cartao-texto">@insight.Conteudo</span>
+        <span class="cartao-rodape"><span>@(Model.DataConversa is null ? "" : $"Conversa de {Model.DataConversa}")</span><span class="ver-mais">Ver detalhes →</span></span>
+    </button>
+    <template id="@detalhe">
+        <div class="detalhe-campo"><span class="rotulo">O que foi percebido</span><p class="detalhe-destaque">@insight.Conteudo</p></div>
+        @if (!string.IsNullOrWhiteSpace(insight.Sugestao)) { <div class="detalhe-campo"><span class="rotulo">Como abordar</span><p>@insight.Sugestao</p></div> }
+        <div class="detalhe-campo">
+            <span class="rotulo">Fala do cliente</span>
+            @if (string.IsNullOrWhiteSpace(insight.TrechoOrigem)) { <p class="texto-suave">Sem trecho registrado para este item.</p> }
+            else { <blockquote>@insight.TrechoOrigem</blockquote> }
+        </div>
+        @if (Model.DataConversa is not null) { <p class="detalhe-origem">Registrado a partir da conversa de @Model.DataConversa.</p> }
+    </template>
+</div>

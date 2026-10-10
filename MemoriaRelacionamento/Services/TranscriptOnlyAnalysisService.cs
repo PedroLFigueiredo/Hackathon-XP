@@ -6,6 +6,6 @@ public sealed class TranscriptOnlyAnalysisService : IConversationAnalysisService
     public Task<AnaliseConversa> AnalisarAsync(AnaliseRequest request, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        return Task.FromResult(new AnaliseConversa([], null, [], [], []));
+        return Task.FromResult(AnaliseConversa.Vazia);
     }
 }

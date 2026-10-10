@@ -1,15 +1,15 @@
 @page
 @model DemoModel
 @{ ViewData["Title"] = "Demonstração"; }
-<div class="page-heading"><p class="eyebrow">DADOS PARA DEMONSTRAÇÃO</p><h1>Crie seis clientes em um clique</h1><p>Cadastros fictícios com diferentes perfis financeiros e personalidades para apresentar o sistema.</p></div>
+<div class="page-heading"><p class="eyebrow">DADOS PARA DEMONSTRAÇÃO</p><h1>Crie seis clientes em um clique</h1><p>Cadastros fictícios para apresentar o sistema. Perfil financeiro e personalidade não vêm preenchidos: aparecem conforme a análise das conversas.</p></div>
 <div asp-validation-summary="All" class="text-danger" role="alert"></div>
 @if (!Model.BancoConfigurado) { <partial name="_DatabaseNotice" /> }
 @if (Model.Resultado is not null) { <div class="alert alert-success" role="status">@Model.Resultado</div> }
 <div class="table-responsive"><table class="table">
-<thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>Perfil financeiro</th><th>Personalidade</th></tr></thead>
-<tbody>@foreach (var cliente in Model.Clientes) { <tr><td>@cliente.Nome</td><td>@cliente.Email</td><td>@cliente.Telefone</td><td>@cliente.PerfilFinanceiro</td><td>@cliente.Personalidade</td></tr> }</tbody>
+<thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th></tr></thead>
+<tbody>@foreach (var cliente in Model.Clientes) { <tr><td>@cliente.Nome</td><td>@cliente.Email</td><td>@cliente.Telefone</td></tr> }</tbody>
 </table></div>
-<p>A carga salva os cadastros no banco. Repetir o clique atualiza os mesmos seis clientes e preserva suas conversas e informações.</p>
+<p>A carga salva os cadastros no banco. Repetir o clique atualiza os mesmos seis clientes e preserva suas conversas, informações e o que a análise já registrou no perfil.</p>
 <form method="post" id="demo-form"><button type="submit" class="btn btn-primary" disabled="@(!Model.BancoConfigurado)">Criar 6 clientes fictícios</button> <a asp-page="/Clientes/Index" class="btn btn-outline-secondary">Abrir clientes</a></form>
 @section Scripts {
 <script>document.getElementById('demo-form').addEventListener('submit', function () { const button = this.querySelector('button'); button.disabled = true; button.textContent = 'Salvando clientes…'; });</script>

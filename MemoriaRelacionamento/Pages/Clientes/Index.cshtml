@@ -12,7 +12,7 @@ else
         <tbody>
         @foreach (var cliente in Model.Clientes)
         {
-            <tr><td>@cliente.Nome</td><td>@cliente.PerfilFinanceiro</td><td>@cliente.Personalidade</td><td>@cliente.Email</td><td>@cliente.Telefone</td>
+            <tr><td>@cliente.Nome</td><td>@(string.IsNullOrWhiteSpace(cliente.PerfilFinanceiro) ? "—" : cliente.PerfilFinanceiro)</td><td>@(string.IsNullOrWhiteSpace(cliente.Personalidade) ? "—" : cliente.Personalidade)</td><td>@cliente.Email</td><td>@cliente.Telefone</td>
             <td><a asp-page="Detalhe" asp-route-id="@cliente.Id">Abrir perfil</a></td></tr>
         }
         </tbody>

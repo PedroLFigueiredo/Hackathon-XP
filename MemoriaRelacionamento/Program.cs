@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 DatabaseConfiguration.Carregar(builder);
+AnalysisRegistration.CarregarChaveLocal(builder);
 
 // Add services to the container.
 builder.Services.AddRazorPages();

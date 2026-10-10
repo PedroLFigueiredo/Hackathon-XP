@@ -6,6 +6,8 @@
 
 **Depende de:** contratos do [00](00-visao-geral.md). Pode ser desenvolvido e testado isolado, com um `.txt` de transcrição fictícia.
 
+> **Implementado** em `MemoriaRelacionamento/Services/OpenAiConversationAnalysisService.cs`. O formato abaixo é o que está no código. Em relação ao rascunho original: cada item tem um campo `categoria` (enum), que o código grava como primeira tag, e cada ação tem `dia_da_semana`, usado para conferir o prazo. O prompt em vigor é o do código, não o rascunho mais abaixo.
+
 ## Formato da resposta
 
 Structured Outputs com `strict: true`. Todos os campos são obrigatórios; os opcionais usam `null`. As chaves seguem as tabelas do `schema.sql`.
@@ -18,30 +20,42 @@ Structured Outputs com `strict: true`. Todos os campos são obrigatórios; os op
   "perfil_financeiro": "conservador | moderado | arrojado | null",
   "perfil_pessoal": [
     {
+      "categoria": "familia | hobby | profissional | objetivo | outro",
       "conteudo": "Filha Marina está estudando para o vestibular de medicina",
       "trecho_origem": "a Marina tá estudando pra medicina",
-      "tags": ["familia", "filha", "vestibular"]
+      "tags": ["filha", "vestibular"]
     }
   ],
   "eventos": [
     {
+      "categoria": "anual | pontual",
       "conteudo": "Prova de vestibular da Marina",
       "data_evento": "2026-11-15",
       "trecho_origem": "a prova é em novembro, dia quinze",
-      "tags": ["pontual", "familia"]
+      "tags": ["familia"]
     }
   ],
   "financeiro": [
     {
+      "categoria": "objetivo | patrimonio | renda | liquidez | preocupacao | outro",
       "conteudo": "Quer comprar um apartamento na praia em até dois anos",
       "trecho_origem": "em uns dois anos eu queria ter o apê na praia",
-      "tags": ["objetivo", "imovel"]
+      "tags": ["imovel"]
     }
   ],
   "acoes": [
-    { "descricao": "Enviar simulação de previdência", "data": "2026-10-17", "tags": ["tarefa", "previdencia"] }
+    { "descricao": "Enviar simulação de previdência", "data": "2026-10-16", "dia_da_semana": "sexta", "tags": ["previdencia"] }
   ],
-  "pautas_sugeridas": ["Perguntar como foi o vestibular da Marina"]
+  "pautas_sugeridas": ["Perguntar como foi o vestibular da Marina"],
+  "insights_assessor": [
+    {
+      "tipo": "apetite_risco | capacidade_financeira | oportunidade | alerta",
+      "direcao_risco": "mais_risco | menos_risco | null",
+      "conteudo": "Recebeu um bônus de 80 mil e diz não precisar do dinheiro por cinco anos",
+      "sugestao": "Confirmar o prazo e a reserva de emergência antes de discutir alternativas",
+      "trecho_origem": "não preciso desse dinheiro nos próximos cinco anos"
+    }
+  ]
 }
 ```
 
