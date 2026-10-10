@@ -24,7 +24,7 @@ Configure a conexão PostgreSQL do Supabase no servidor:
 dotnet user-secrets set "ConnectionStrings:Supabase" "Host=SEU_HOST;Port=5432;Database=postgres;Username=SEU_USUARIO;Password=SUA_SENHA;SSL Mode=Require" --project MemoriaRelacionamento
 ```
 
-Também é possível usar a variável ConnectionStrings__Supabase. Sem conexão configurada, as telas mostram um aviso e a carga fica desabilitada. Credenciais não são enviadas ao navegador.
+Também é possível usar a variável ConnectionStrings__Supabase ou DATABASE_URL no formato postgresql://usuario:senha@host:5432/postgres. Em Development, a aplicação lê essas chaves do .env na raiz do repositório ou da aplicação; a conexão explícita em configuração tem prioridade. Senhas com caracteres especiais na URL devem usar codificação de URL. O .env permanece ignorado pelo Git. Reinicie a aplicação após alterar a conexão. Sem conexão configurada, as telas mostram um aviso e a carga fica desabilitada. Credenciais não são enviadas ao navegador.
 
 ## Demonstração
 

@@ -3,6 +3,7 @@ using MemoriaRelacionamento.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+DatabaseConfiguration.Carregar(builder);
 
 // Add services to the container.
 builder.Services.AddRazorPages();
