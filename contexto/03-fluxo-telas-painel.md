@@ -150,16 +150,7 @@ Os resultados alimentam resumo, tom, memória pessoal, eventos, informações fi
 
 Sem chave da OpenAI e sem análise fictícia, a conversa preserva a transcrição sem gerar os resultados de análise. Quando serviços fictícios estão ativos, a interface sinaliza o modo de demonstração.
 
-## 8. Limites do fluxo atual
-
-O planejamento anterior previa recursos que ainda não compõem a interface implementada:
-
-- Painel geral com alertas e tarefas consolidadas de toda a carteira.
-- Etapa de aprovação, edição ou descarte dos dados extraídos antes de sua inclusão na memória. Os resultados são salvos pelo processamento e exibidos diretamente; o campo de revisão no banco não representa um fluxo de aprovação na tela.
-- Cadastro e edição manual de clientes pela interface.
-- Autenticação, gestão de múltiplos assessores e integrações com CRM, calendário ou e-mail.
-
-## 9. Roteiro de demonstração do fluxo
+## 8. Roteiro de demonstração do fluxo
 
 1. Em **Demonstração**, criar os seis clientes e abrir a carteira.
 2. Abrir o perfil de um cliente e apresentar os estados iniciais.
