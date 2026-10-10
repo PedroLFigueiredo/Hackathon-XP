@@ -1,0 +1,21 @@
+@page
+@model MemoriaRelacionamento.Pages.Clientes.IndexModel
+@{ ViewData["Title"] = "Clientes"; }
+
+<h1>Clientes</h1>
+
+<ul>
+    @foreach (var c in Model.Clientes)
+    {
+        <li><a asp-page="Detalhe" asp-route-id="@c.Id">@c.Nome</a></li>
+    }
+</ul>
+
+<h2>Novo cliente</h2>
+<form method="post">
+    <div asp-validation-summary="All" class="text-danger"></div>
+    <p><label>Nome <input asp-for="Nome" required /></label></p>
+    <p><label>Telefone <input asp-for="Telefone" /></label></p>
+    <p><label>E-mail <input asp-for="Email" /></label></p>
+    <button type="submit">Criar</button>
+</form>

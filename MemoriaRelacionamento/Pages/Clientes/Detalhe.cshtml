@@ -1,0 +1,51 @@
+@page "{id:guid}"
+@model MemoriaRelacionamento.Pages.Clientes.DetalheModel
+@{ ViewData["Title"] = Model.Cliente.Nome; }
+
+<h1>@Model.Cliente.Nome</h1>
+<p>@Model.Cliente.Telefone @Model.Cliente.Email</p>
+
+<div asp-validation-summary="All" class="text-danger"></div>
+
+<h2>Nova conversa</h2>
+<form method="post" asp-page-handler="Texto">
+    <p><label>Data da reunião <input type="date" asp-for="Data" /></label></p>
+    <p><textarea asp-for="Texto" rows="8" cols="80" placeholder="Cole a transcrição (mínimo 50 caracteres)"></textarea></p>
+    <button type="submit">Enviar texto</button>
+</form>
+
+<form method="post" enctype="multipart/form-data" asp-page-handler="Audio">
+    <p><label>Data da reunião <input type="date" name="Data" value="@Model.Data.ToString("yyyy-MM-dd")" /></label></p>
+    <p><input type="file" name="Audio" accept=".wav,.mp3,.m4a" /></p>
+    <button type="submit">Enviar áudio</button>
+</form>
+
+<h2>Conversas</h2>
+<table class="table">
+    <tr><th>Data</th><th>Origem</th><th>Status</th><th>Erro</th></tr>
+    @foreach (var c in Model.Conversas)
+    {
+        <tr>
+            <td>@c.Data.ToString("dd/MM/yyyy")</td>
+            <td>@c.Origem</td>
+            <td data-conversa="@c.Id" data-status="@c.Status">@c.Status</td>
+            <td>@c.MensagemDeErro</td>
+        </tr>
+    }
+</table>
+
+@section Scripts {
+<script>
+    // Polling simples: recarrega quando uma conversa em andamento muda de status.
+    document.querySelectorAll('td[data-conversa]').forEach(td => {
+        const atual = td.dataset.status;
+        if (atual === 'Concluida' || atual === 'Erro') return;
+        const t = setInterval(async () => {
+            const r = await fetch(`/api/conversas/${td.dataset.conversa}/status`);
+            if (!r.ok) return;
+            const s = await r.json();
+            if (s.status !== atual) { clearInterval(t); location.reload(); }
+        }, 2000);
+    });
+</script>
+}
