@@ -1,32 +1,77 @@
-# 02. Arquitetura, Stack Tecnológica e Execução do MVP
+# 02. Arquitetura e Stack Tecnológica do MVP
 
-## 1. Stack Tecnológica
+Documento atualizado em 10/10/2026, conforme o código e o schema atuais.
 
-- **Backend e frontend:** ASP.NET Core com Razor Pages, utilizando C#.
-- **Banco de dados:** Supabase PostgreSQL, acessado pela aplicação por meio de uma biblioteca compatível com C# e PostgreSQL.
-- **Processamento de áudio e transcrição:** Whisper.net. Os modelos devem ser armazenados em disco local e a transcrição deve ocorrer offline, na própria máquina. O áudio não deve ser enviado a um serviço externo para transcrição.
-- **Inteligência Artificial para análise textual:** API da OpenAI, utilizando o modelo `gpt-4o-mini`. A aplicação envia a transcrição para análise e solicita uma resposta em JSON estruturado.
+## 1. Stack tecnológica
 
-## 2. Arquitetura de Software
+| Componente | Implementação atual |
+| --- | --- |
+| Aplicação web | C# em .NET 10, ASP.NET Core e Razor Pages. |
+| Interface | HTML renderizado no servidor, CSS, Bootstrap e JavaScript para abas, modais e acompanhamento de status. |
+| Persistência | Entity Framework Core com `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3 e conexão PostgreSQL direta ao Supabase. |
+| Transcrição | `Whisper.net` e `Whisper.net.Runtime` 1.9.1, com modelo local multilíngue `ggml-base.bin` por padrão. |
+| Normalização de áudio | NAudio 2.2.1, usando Media Foundation no Windows. |
+| Análise textual | API da OpenAI pelo endpoint `v1/chat/completions`, via `HttpClient`; modelo padrão `gpt-4o-mini`. |
+| Processamento | `BackgroundService` e fila em memória com `System.Threading.Channels`. |
+| Testes | xUnit e SQLite para testes de persistência; a aplicação utiliza PostgreSQL. |
 
-### 2.1 Processamento
+O frontend está incluído em `wwwroot`, sem uma etapa de build com Node.js. A transcrição não exige o pacote Python do Whisper, FFmpeg ou chave da OpenAI. O modelo é disponibilizado previamente em disco, não baixado durante requisições.
 
-O processamento de áudio e as chamadas à API da OpenAI devem ocorrer em segundo plano dentro da própria aplicação ASP.NET Core, sem dependência de filas externas ou microsserviços.
+## 2. Arquitetura e processamento
 
-A interface poderá consultar periodicamente o status da conversa para informar ao assessor se o processamento está aguardando, em andamento, concluído ou com erro.
+### 2.1. Organização e decisões
 
-O processamento deverá atualizar os dados da conversa ao longo das etapas, permitindo identificar falhas de transcrição, análise ou persistência.
+O projeto mantém uma única aplicação com responsabilidades separadas entre `Pages`, `Services`, `Models` e `Data`. Aplica princípios de arquitetura limpa por meio de contratos e separação de responsabilidades, sem uma divisão completa em projetos independentes de domínio, aplicação e infraestrutura.
 
-### 2.2 Contratos e responsabilidades
+O princípio KISS orienta a implementação: contratos para serviços substituíveis, processamento interno e consultas simples de status. A aplicação não depende de microsserviços ou filas externas.
 
-A implementação deverá utilizar abstrações simples para separar responsabilidades:
+A escolha de C# está alinhada ao uso da linguagem na XP, conforme o contexto informado pela equipe, facilitando a aproximação com seu ambiente tecnológico. Razor Pages concentra interface e backend no mesmo projeto. PostgreSQL organiza as relações entre clientes e conversas; Whisper atende à transcrição local; GPT-4o-mini é o modelo adotado para a extração estruturada de texto. Esses são critérios de projeto, sem um benchmark comparativo documentado.
 
-- `ITranscriptionService`: recebe o arquivo de áudio e retorna a transcrição produzida localmente pelo Whisper.net.
-- `IConversationAnalysisService`: recebe a transcrição e solicita à API da OpenAI a extração de informações estruturadas.
-- Serviços de persistência: salvam e consultam clientes, conversas, informações extraídas, ações e insights do assessor.
+### 2.2. Responsabilidades implementadas
 
-A solução deve permanecer em uma única aplicação, evitando microsserviços e complexidade desnecessária para o prazo do hackathon.
+| Componente | Responsabilidade |
+| --- | --- |
+| Razor Pages e seus PageModels | Exibir dados, receber formulários, validar o envio e encaminhar ações aos serviços ou ao contexto de dados. |
+| `ConversaService` | Salvar texto ou áudio, validar formato e tamanho, enfileirar conversas e solicitar nova tentativa. |
+| `ConversaQueue` | Manter IDs de conversas em um canal em memória com leitor único. |
+| `ConversaWorker` | Recuperar pendências disponíveis na máquina e processar um job por vez, em um escopo de serviços por job. |
+| `ConversaProcessor` | Coordenar transcrição, análise, atualização do perfil e persistência dos resultados. |
+| `ITranscriptionService` | Contrato da transcrição real ou fictícia, incluindo acompanhamento de progresso. |
+| `IConversationAnalysisService` | Contrato da análise real, fictícia ou de preservação apenas da transcrição. |
+| `AppDbContext` | Mapear entidades para o schema PostgreSQL e acessar os dados. |
+| `TranscriptionProgressStore` e `LocalTranscriptCache` | Manter progresso em memória e preservar transcrição completa ou parcial em disco. |
 
+A separação é pragmática: alguns PageModels consultam e atualizam dados diretamente pelo `AppDbContext`.
+
+### 2.3. Fluxo da conversa
+
+1. O formulário recebe a data e um texto de pelo menos 50 caracteres, ou áudio WAV, MP3 ou M4A de até 200 MB.
+2. A aplicação salva a conversa como `aguardando` e enfileira seu ID.
+3. Se necessário, o áudio é normalizado para WAV mono, 16 kHz, 16 bits e transcrito pelo Whisper em português.
+4. A transcrição é preservada e o status passa para `analisando`.
+5. A análise recebe nome, data, transcrição, informações pessoais, eventos e informações financeiras já registrados, além do perfil financeiro cadastrado.
+6. Os resultados e o status `concluído` são salvos juntos: resumo, tom, memória, tarefas, pautas, insights e alterações aplicáveis ao perfil.
+7. Em falha, a aplicação tenta registrar `erro`, a etapa e uma mensagem, preservando a transcrição completa disponível.
+
+### 2.4. Análise por IA e validação
+
+A requisição usa `temperature: 0.2` e Structured Outputs com `response_format.type: json_schema` e `strict: true`. O modelo pode ser alterado por `OpenAI:Model`. O cliente HTTP tem timeout de 120 segundos.
+
+Após a resposta, a aplicação desserializa e normaliza campos, categorias, datas e valores reconhecidos. Confere trechos de origem contra a transcrição após normalização de texto; citações não verificadas são removidas. Nos insights para o assessor, itens sem fala verificável são descartados, a mesma fala não sustenta dois insights e são mantidos no máximo quatro por análise.
+
+O perfil financeiro só é aceito quando identificado como declaração explícita compatível com os perfis reconhecidos e só preenche um cadastro ainda vazio. A personalidade é estimada para transcrições com pelo menos 600 caracteres; não é atualizada quando há conversa mais recente. Uma divergência de apetite a risco pode acrescentar orientação para revisar o perfil, sem alterá-lo automaticamente.
+
+Falhas de rede, timeout, recusa, chave inválida, limite de uso ou resposta inesperada são tratadas como erros de análise. Essas verificações não comprovam a exatidão de toda interpretação gerada pela IA.
+
+### 2.5. Recuperação e acompanhamento
+
+A fila é volátil, mas os estados das conversas ficam no banco. Com `Pipeline:RecuperarNoStartup=true`, o worker recupera conversas em espera, transcrição ou análise quando a transcrição está disponível ou o arquivo de áudio existe na máquina. Pendências cujo áudio está em outra máquina ficam para aquela máquina.
+
+A transcrição completa pode ser reutilizada sem repetir o Whisper. Backups `.parcial.txt` e `.transcricao.txt` ficam junto aos áudios em `uploads/`, fora de `wwwroot`; a transcrição parcial permite consultar o trabalho preservado, mas não representa retomada do Whisper a partir do último segmento.
+
+O PostgreSQL está configurado com até três novas tentativas em falhas transitórias. O MVP pressupõe um único worker ativo; não há coordenação distribuída entre instâncias.
+
+O navegador consulta `/api/conversas/{id}/status` a cada dois segundos enquanto há conversas pendentes. O endpoint entrega status, erro e progresso disponível; ao detectar conclusão ou erro, a página é recarregada. `/health` verifica apenas a resposta da aplicação, sem consultar banco, Whisper ou OpenAI.
 ## 3. Modelo de Dados — Supabase PostgreSQL
 
 O banco de dados está organizado em tabelas específicas para os dados dos clientes, as conversas e os diferentes tipos de informação extraída. A estrutura abaixo segue o esquema SQL definido para o projeto.
@@ -52,15 +97,15 @@ Armazena cada reunião processada e seu estado.
 |---|---|
 | `id` | Identificador UUID e chave primária. |
 | `cliente_id` | Referência obrigatória a `clientes.id`; a exclusão do cliente exclui suas conversas. |
-| `data` | Data e hora da conversa, preenchida por padrão com `now()`. |
-| `caminho_audio` | Caminho ou referência ao arquivo de áudio; obrigatório. |
-| `tom` | Campo textual para registrar o tom identificado, se implementado. |
+| `data` | Data da conversa; a aplicação grava a data informada na interface à meia-noite UTC. O SQL tem padrão `now()`. |
+| `caminho_audio` | Caminho local do áudio; para conversas de texto, a aplicação grava uma string vazia. |
+| `tom` | Tom identificado na análise, mapeado para o enum de sentimento da aplicação. |
 | `status` | Estado do processamento; obrigatório. |
 | `transcricao` | Texto transcrito pelo Whisper.net. |
-| `resumo` | Resumo produzido durante a análise, se disponível. |
+| `resumo` | Tópicos produzidos na análise, armazenados como texto separado por quebras de linha. |
 | `mensagem_erro` | Mensagem de erro relacionada ao processamento, quando houver. |
 
-Os valores de `status` são armazenados como texto. Os valores esperados no MVP incluem `aguardando`, `transcrevendo`, `analisando`, `concluído` e `erro`; a aplicação deve manter uma convenção consistente ao gravá-los.
+Os valores de `status` são armazenados como texto. Os valores esperados no MVP incluem `aguardando`, `transcrevendo`, `analisando`, `concluído` e `erro`; o mapeamento do Entity Framework grava esses valores e também aceita `concluido` na leitura.
 
 ### 3.3 `perfil_pessoal`
 
@@ -76,7 +121,7 @@ Armazena informações pessoais extraídas das conversas, como interesses, prefe
 | `tags` | Array de palavras-chave ou categorias. |
 | `status_revisao` | Estado da revisão, com padrão `pendente`. |
 
-Os estados de revisão previstos são `pendente`, `aprovado` e `descartado`.
+A aplicação grava `pendente` e exibe os registros diretamente. Não há fluxo de alteração desse campo na interface.
 
 ### 3.4 `informacao_eventos`
 
@@ -106,9 +151,9 @@ Armazena informações financeiras mencionadas durante as conversas, sem realiza
 | `status_revisao` | Estado da revisão, com padrão `pendente`. |
 
 
-### 3.6 `Ações`
+### 3.6 `acoes`
 
-Armazena próximas ações e compromissos relacionados ao cliente e à conversa.
+Armazena tarefas e pautas relacionadas ao cliente e à conversa. A tag reservada `pauta` distingue pautas; tarefas recebem a tag `tarefa`.
 
 | Campo | Descrição |
 |---|---|
@@ -120,11 +165,11 @@ Armazena próximas ações e compromissos relacionados ao cliente e à conversa.
 | `tags` | Array de palavras-chave ou categorias. |
 | `status_conclusao` | Estado da ação, com padrão `pendente`. |
 
-Os estados de conclusão previstos incluem `pendente` e `concluido`.
+A interface alterna o estado entre `pendente` e `concluido`.
 
 ### 3.7 `insights_assessor`
 
-Armazena insights ou sugestões gerados para apoiar o assessor.
+Armazena sinais interpretativos para o assessor, com os tipos `apetite_risco`, `capacidade_financeira`, `oportunidade` e `alerta`, associados à conversa de origem.
 
 | Campo | Descrição |
 |---|---|
@@ -142,35 +187,40 @@ Armazena insights ou sugestões gerados para apoiar o assessor.
 - Uma conversa pertence a um cliente.
 - Uma conversa pode originar vários registros em `perfil_pessoal`, `acoes` e `insights_assessor`.
 - Um cliente pode ter vários eventos em `informacao_eventos` e vários registros em `informacao_financeiro`.
-- As tabelas `perfil_pessoal`, `informacao_eventos` e `informacao_financeiro` mantêm o estado de revisão para apoiar a validação humana, conforme o esquema definido.
+- As tabelas `perfil_pessoal`, `informacao_eventos` e `informacao_financeiro` contêm `status_revisao`, mantido como `pendente` pelo processamento atual; esse campo não controla uma aprovação na interface.
 - As chaves estrangeiras configuradas com `ON DELETE CASCADE` fazem com que a exclusão de um cliente remova as conversas e os registros dependentes ligados por essas relações. Esse comportamento deve ser considerado nas rotinas de manutenção e demonstração.
 
-## 5. Plano de Execução — Timeline de 7 Horas
+## 5. Configuração e condições de execução
 
-1. **Dependências e validação inicial:** instalar o Whisper.net, verificar a disponibilidade do modelo local e confirmar que a API da OpenAI retorna JSON válido.
-2. **Persistência:** configurar a conexão com o Supabase PostgreSQL, criar ou validar as tabelas e implementar operações básicas de cadastro e consulta de clientes.
-3. **Transcrição:** criar o upload de arquivo WAV na interface e processar o áudio localmente com Whisper.net.
-4. **Análise:** enviar a transcrição à API da OpenAI, validar a resposta estruturada e mapear os resultados para as tabelas correspondentes.
-5. **Interface do cliente:** implementar a visualização do perfil e a revisão dos registros extraídos.
-6. **Painel:** criar a página inicial com a visão geral do assessor e os acessos às informações principais.
-7. **Polimento:** validar o fluxo completo com dados fictícios, apresentar estados de processamento e tratar erros esperados.
+- **Banco:** conexão PostgreSQL configurada no servidor por `ConnectionStrings:Supabase`, variável equivalente ou `DATABASE_URL`; URL do projeto e chaves da API Supabase não substituem essa conexão. Em Development, o leitor local carrega as chaves de banco suportadas do `.env`.
+- **Schema:** as tabelas são preparadas manualmente com os scripts SQL; a aplicação não cria nem migra tabelas automaticamente. Para a tabela adicional de insights, existe `MemoriaRelacionamento/db/insights_assessor.sql`.
+- **Whisper:** transcrição real habilitada por padrão, dependente de Windows e do arquivo em `Whisper:ModelPath`. A factory do modelo é compartilhada; um processor é criado para cada transcrição.
+- **OpenAI:** chave em `OpenAI:ApiKey` ou `OPENAI_API_KEY`. Em Development, o leitor também aceita as chaves suportadas no `.env`. A chave e as credenciais do banco permanecem no servidor.
+- **Simulação:** `Fakes:Transcricao` e `Fakes:Analise` ativam serviços fictícios separadamente. Sem chave e com análise fictícia desligada, `TranscriptOnlyAnalysisService` preserva a transcrição sem gerar fatos, resumo ou insights.
+- **Demonstração:** a carga de seis clientes é explícita e repetível, com IDs fixos, preservando o histórico e os campos de perfil já preenchidos.
 
-## 6. Regras para a IA Geradora de Código (Claude Code)
+## 6. Características do armazenamento e acesso
 
-- Trabalhar de forma incremental e entregar código executável a cada etapa.
-- Validar antecipadamente se o hardware local consegue executar o modelo Whisper escolhido; comunicar limitações de memória, desempenho ou dependências antes de investir na integração completa.
-- Manter os arquivos do modelo Whisper em disco local e executar a transcrição offline.
-- Solicitar respostas em JSON estruturado à API da OpenAI. Quando compatível com o endpoint e o modelo utilizados, configurar `response_format` para JSON estrito, por exemplo `{"type":"json_object"}`, e validar o conteúdo retornado antes de persistir os dados.
-- Não presumir que JSON válido garante conformidade com o esquema esperado: validar campos obrigatórios, tipos e valores antes de gravar no banco.
-- Não inserir chaves de API ou credenciais do Supabase diretamente no código-fonte ou no repositório.
-- Utilizar exclusivamente dados fictícios na demonstração do MVP.
-- Manter as responsabilidades separadas por serviços e evitar microsserviços, filas externas ou infraestrutura que não seja necessária para demonstrar o fluxo principal.
+Eventos e informações financeiras pertencem ao cliente e não têm coluna `conversa_id`; mantêm conteúdo, tags e trecho de origem. Informações pessoais, ações e insights do assessor também possuem vínculo com a conversa.
 
-## 7. Pontos de Atenção e Limitações Conhecidas
+Pautas ficam na tabela `acoes`, distinguidas por tag. Resumos são listas na aplicação e texto separado por quebras de linha no banco. A origem da conversa é inferida de `caminho_audio`: vazio para texto, caminho local para áudio.
 
-- O esquema atual usa campos `TEXT` para estados e categorias; a aplicação deve validar os valores permitidos.
-- A tabela `insights_assessor` possui RLS ativado, mas as políticas de acesso precisam ser verificadas separadamente.
-- As tabelas `informacao_eventos` e `informacao_financeiro` não possuem uma coluna `conversa_id`; adicionar essa relação exige uma alteração explícita no esquema.
-- A tabela `conversas` exige `caminho_audio`. A aplicação deverá garantir que esse valor seja fornecido e corresponda à estratégia de armazenamento adotada.
-- A ausência de autenticação e de gestão de múltiplos assessores limita o MVP a demonstrações controladas. Não utilizar a configuração inicial como sistema produtivo para dados reais de clientes.
-- O processamento em segundo plano dentro da própria aplicação atende ao escopo do hackathon, mas não equivale a uma infraestrutura durável de filas: reinícios da aplicação podem interromper tarefas em andamento, dependendo da implementação.
+`insights_assessor` tem RLS habilitado pelo SQL. A aplicação acessa o banco por conexão PostgreSQL direta; o comportamento de acesso depende do usuário dessa conexão e das regras do banco. A presença de RLS nessa tabela não equivale a autenticação ou isolamento de usuários na aplicação.
+
+O sistema não possui autenticação ou gestão de múltiplos assessores. A transcrição é local, mas o banco e a análise textual são serviços externos. A análise envia transcrição e contexto do cliente à OpenAI.
+
+## 7. Verificação existente
+
+O projeto `MemoriaRelacionamento.Tests` utiliza xUnit e SQLite. Os testes incluem carga de demonstração e preservação de histórico, validação de conversas, processamento e recuperação, comportamento sem análise e tratamento da resposta da OpenAI com transporte simulado.
+
+Esses testes não equivalem a validação automática de uma chamada real à OpenAI, do desempenho do Whisper ou das permissões de um banco Supabase. O comando de execução é `dotnet test HackathonXP.sln`.
+
+## Referências
+
+- Dependências: `MemoriaRelacionamento/MemoriaRelacionamento.csproj`.
+- Configuração e endpoints: `MemoriaRelacionamento/Program.cs`, `appsettings.json` e `Services/ServiceRegistration.cs`.
+- Pipeline: `Services/ConversaService.cs`, `ConversaQueue.cs`, `ConversaWorker.cs` e `ConversaProcessor.cs`.
+- Integrações: `Services/WhisperTranscriptionService.cs`, `AudioNormalizer.cs`, `AnalysisRegistration.cs` e `OpenAiConversationAnalysisService.cs`.
+- Persistência: `Data/AppDbContext.cs` e `db/schema.sql`.
+- Passo a passo de execução: `README.md`.
+- Fluxo de telas: `contexto/03-fluxo-telas-painel.md`.
